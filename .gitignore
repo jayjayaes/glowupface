@@ -1,0 +1,4 @@
+# 검토용 산출물과 임시 파일
+review/
+*.zip
+.DS_Store
