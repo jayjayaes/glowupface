@@ -69,7 +69,8 @@ Branch 를 `main`, 폴더를 `/ (root)` 로 두면 끝이다
 ## 딸린 것
 
 `minecraft/` 에 웹 복셀 게임이 한 장 들어 있다 사이트와는 상관없는 딴짓이고
-역시 프레임워크도 빌드도 없다 [열어보기](./minecraft/index.html) · [설명](./minecraft/README.md)
+역시 프레임워크도 빌드도 없다 해가 뜨고 지고 밤에는 좀비가 오고 캔 것으로 도구를 만든다
+[열어보기](./minecraft/index.html) · [설명](./minecraft/README.md)
 
 ---
 
