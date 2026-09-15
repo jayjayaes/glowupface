@@ -119,9 +119,14 @@ canvas{image-rendering:auto}
 .note{margin-top:14px;font-size:11px;color:#6E6559;line-height:1.7}
 
 /* ---------- 가방과 제작 ---------- */
-#inv{position:fixed;inset:0;z-index:19;display:none;place-items:center;padding:16px;
+#inv,#tile{position:fixed;inset:0;z-index:19;display:none;place-items:center;padding:16px;
   background:rgba(6,5,4,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-#inv.on{display:grid}
+#inv.on,#tile.on{display:grid}
+.fire{display:flex;align-items:center;gap:12px;margin:14px 0;flex-wrap:wrap}
+.fire .lab{font-size:12px;color:var(--muted)}
+.gauge{width:120px;height:7px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+.gauge i{display:block;height:100%;width:0;background:var(--accent)}
+.gauge.heat i{background:#E08A3C}
 .invcard{width:min(680px,100%);max-height:100%;overflow-y:auto;border:1px solid var(--line);border-radius:18px;
   padding:22px;background:linear-gradient(180deg,rgba(27,23,18,.97),rgba(10,9,8,.97));box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .invcard h2{font-size:18px;font-weight:800;letter-spacing:-.03em;margin-bottom:3px}
@@ -230,6 +235,19 @@ canvas{image-rendering:auto}
   </div>
 </div>
 
+<div id="tile">
+  <div class="invcard">
+    <h2 id="tileName">상자</h2>
+    <p class="hint" id="tileHint"></p>
+    <div id="tileBody"></div>
+    <h3>가방</h3>
+    <div class="bag" id="tileBag"></div>
+    <div class="btnrow" style="margin-top:18px">
+      <button class="btn ghost" id="tileClose">닫기 (E)</button>
+    </div>
+  </div>
+</div>
+
 <div id="dead">
   <div class="card">
     <h1>죽었다</h1>
@@ -259,9 +277,9 @@ canvas{image-rendering:auto}
       <kbd>Space</kbd><span>점프 · 두 번 누르면 날기</span>
       <kbd>Shift</kbd><span>달리기 · 날 때는 내려가기</span>
       <kbd>왼쪽 꾹</kbd><span>블록 캐기 · 몹 때리기</span>
-      <kbd>오른쪽 클릭</kbd><span>블록 놓기</span>
+      <kbd>오른쪽 클릭</kbd><span>블록 놓기 · 상자와 화로 열기 · 괭이 씨앗 부시 양동이 쓰기</span>
       <kbd>E</kbd><span>가방과 제작</span>
-      <kbd>R</kbd><span>고기 먹기</span>
+      <kbd>R</kbd><span>먹기 (고기 · 빵)</span>
       <kbd>1 ~ 9 · 휠</kbd><span>손에 든 것 고르기</span>
       <kbd>T</kbd><span>시간 멈추기</span>
       <kbd>F</kbd><span>날기 켜고 끄기</span>
@@ -286,6 +304,8 @@ canvas{image-rendering:auto}
    가방과 제작     : 캔 것이 쌓이고 세 칸씩 세 줄에 놓아 도구를 만든다
    ============================================================ */
 
+const $ = (id) => document.getElementById(id);
+
 /* ---------- 1. 상수 ---------- */
 const CX = 16, CZ = 16, CH = 64;
 const SEA = 26;
@@ -305,8 +325,13 @@ const T = {
   COAL_ORE:16, IRON_ORE:17, GLOW:18, WOOL:19,
   PIG:20, PIG_FACE:21, SHEEP_FACE:22, ZOMBIE:23, ZOMBIE_FACE:24,
   I_COAL:25, I_IRON:26, I_STICK:27, I_PORK:28, I_SWORD:29, I_PICK:30,
+  FARMLAND:31, WHEAT0:32, WHEAT1:33, WHEAT2:34, WHEAT3:35, FIRE:36,
+  CHEST_SIDE:37, CHEST_TOP:38, FURNACE_SIDE:39, FURNACE_TOP:40,
+  VILLAGER:41, VILLAGER_FACE:42,
+  I_FLINT:43, I_STEEL:44, I_HOE:45, I_SEED:46, I_WHEAT:47, I_BREAD:48, I_COOKED:49,
+  I_BUCKET:50, I_WBUCKET:51,
 };
-const LAYERS = 31, TILE = 32;
+const LAYERS = 52, TILE = 32;
 
 /* ---------- 3. 블록과 물건 ---------- */
 // L: [윗면, 옆면, 아랫면] · tough: 맨손으로 캐는 데 걸리는 초 · drop: 캐면 나오는 것
@@ -331,7 +356,22 @@ const BLOCKS = [
   { name:'철광석',   L:[T.IRON_ORE,T.IRON_ORE,T.IRON_ORE],tough:3.0, pick:true, drop:101 },
   { name:'빛돌',     L:[T.GLOW,T.GLOW,T.GLOW],            tough:0.5, emit:true },
   { name:'양털',     L:[T.WOOL,T.WOOL,T.WOOL],            tough:0.8 },
+  { name:'밭',       L:[T.FARMLAND,T.DIRT,T.DIRT],        tough:0.5, drop:2 },                       // 19
+  { name:'밀싹',     L:[T.WHEAT0,T.WHEAT0,T.WHEAT0],      tough:0.05, see:true, pass:true, cross:true, crop:0 },
+  { name:'밀',       L:[T.WHEAT1,T.WHEAT1,T.WHEAT1],      tough:0.05, see:true, pass:true, cross:true, crop:1 },
+  { name:'밀',       L:[T.WHEAT2,T.WHEAT2,T.WHEAT2],      tough:0.05, see:true, pass:true, cross:true, crop:2 },
+  { name:'다 익은 밀',L:[T.WHEAT3,T.WHEAT3,T.WHEAT3],     tough:0.05, see:true, pass:true, cross:true, crop:3 },
+  { name:'불',       L:[T.FIRE,T.FIRE,T.FIRE],            tough:0.02, see:true, pass:true, cross:true, emit:true, fire:true, drop:0 },  // 24
+  { name:'상자',     L:[T.CHEST_TOP,T.CHEST_SIDE,T.CHEST_TOP], tough:1.6, tile:'chest' },             // 25
+  { name:'화로',     L:[T.FURNACE_TOP,T.FURNACE_SIDE,T.FURNACE_TOP], tough:2.6, pick:true, tile:'furnace' }, // 26
 ];
+// 흐르는 물 일곱 칸 · 샘에서 멀어질수록 번호가 커지고 7 에서 멈춘다
+const FLOW0 = BLOCKS.length;                    // 27
+for (let i = 1; i <= 7; i++) BLOCKS.push({ name:'흐르는 물', L:[T.WATER,T.WATER,T.WATER], see:true, fluid:true, flow:i, drop:0 });
+const FLOW_MAX = 7;
+const isWater = (id) => id === WATER || (id >= FLOW0 && id < FLOW0 + FLOW_MAX);
+const flowOf = (id) => id === WATER ? 0 : id >= FLOW0 && id < FLOW0 + FLOW_MAX ? BLOCKS[id].flow : 99;
+const FARM = 19, CROP0 = 20, FIRE = 24, CHEST = 25, FURNACE = 26;
 // 블록이 아닌 물건은 100번부터
 const ITEMS = {
   100:{ name:'석탄',     tex:T.I_COAL },
@@ -340,11 +380,20 @@ const ITEMS = {
   103:{ name:'고기',     tex:T.I_PORK, food:6 },
   104:{ name:'철검',     tex:T.I_SWORD, dmg:7 },
   105:{ name:'철곡괭이', tex:T.I_PICK, pick:3.6 },
+  106:{ name:'부싯돌',   tex:T.I_FLINT },
+  107:{ name:'부시',     tex:T.I_STEEL, lighter:true },
+  108:{ name:'괭이',     tex:T.I_HOE, hoe:true },
+  109:{ name:'씨앗',     tex:T.I_SEED, seed:true },
+  110:{ name:'밀',       tex:T.I_WHEAT },
+  111:{ name:'빵',       tex:T.I_BREAD, food:8 },
+  112:{ name:'구운 고기', tex:T.I_COOKED, food:10 },
+  113:{ name:'양동이',   tex:T.I_BUCKET, bucket:true },
+  114:{ name:'물동이',   tex:T.I_WBUCKET, water:true },
 };
 const itemName = (id) => id >= 100 ? ITEMS[id].name : BLOCKS[id].name;
 const itemTex  = (id) => id >= 100 ? ITEMS[id].tex  : BLOCKS[id].L[1];
 const isBlockItem = (id) => id > 0 && id < 100;
-const isSolid  = id => id !== AIR && !BLOCKS[id].fluid;
+const isSolid  = id => id !== AIR && !BLOCKS[id].fluid && !BLOCKS[id].pass;
 const isOpaque = id => id !== AIR && !BLOCKS[id].see;
 
 /* ---------- 4. 제작법 ---------- */
@@ -352,12 +401,23 @@ const isOpaque = id => id !== AIR && !BLOCKS[id].see;
 const RECIPES = [
   { out:[8,4],   shapeless:[6],            hint:'통나무 하나' },
   { out:[102,4], shape:['P','P'], key:{P:8}, hint:'나무판자 둘을 세로로' },
-  { out:[11,1],  shapeless:[5,100],        hint:'모래와 석탄' },
+
   { out:[12,4],  shape:['CC','CC'], key:{C:4}, hint:'조약돌 넷' },
   { out:[17,2],  shapeless:[11,100,100],   hint:'유리와 석탄 둘' },
   { out:[104,1], shape:['I','I','S'], key:{I:101,S:102}, hint:'철 둘 위에 막대기' },
   { out:[105,1], shape:['III',' S ',' S '], key:{I:101,S:102}, hint:'철 셋과 막대기 둘' },
+  { out:[108,1], shape:['II',' S',' S'], key:{I:101,S:102}, hint:'철 둘과 막대기 둘' },
+  { out:[107,1], shapeless:[101,106],       hint:'철과 부싯돌' },
+  { out:[25,1],  shape:['PPP','P P','PPP'], key:{P:8}, hint:'나무판자 여덟' },
+  { out:[26,1],  shape:['CCC','C C','CCC'], key:{C:4}, hint:'조약돌 여덟' },
+  { out:[111,1], shape:['WWW'], key:{W:110}, hint:'밀 셋' },
+  { out:[113,1], shape:['I I',' I '], key:{I:101}, hint:'철 셋을 U 모양으로' },
 ];
+// 화로에서 굽는 것 · [재료, 결과, 굽는 데 걸리는 초]
+const SMELT = [
+  [16, 101, 8], [5, 11, 6], [103, 112, 7], [6, 100, 9], [3, 4, 6],
+];
+const FUEL = { 100: 40, 8: 9, 6: 14, 102: 4 };   // 땔감이 타는 초
 
 /* ---------- 5. 잡음 ---------- */
 function hash2(x, z, s){
@@ -373,6 +433,7 @@ function hash3(x, y, z, s){
 const smooth = t => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const mix3 = (a, b, t) => [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)];
 function noise2(x, z, s){
   const xi = Math.floor(x), zi = Math.floor(z);
   const tx = smooth(x - xi), tz = smooth(z - zi);
@@ -416,6 +477,27 @@ function oreAt(wx, wy, wz){
   if (wy < 30 && noise3(wx * 0.14, wy * 0.14, wz * 0.14, SEED + 201) > 0.80) return 15;   // 석탄
   if (wy < 22 && noise3(wx * 0.17, wy * 0.17, wz * 0.17, SEED + 202) > 0.855) return 16;  // 철
   return 0;
+}
+// 마을은 160칸 격자마다 있을 수도 없을 수도 있다 자리도 집 수도 씨앗이 정한다
+const VILL = 160;
+function villageAt(rx, rz){
+  if (hash2(rx, rz, SEED + 900) > 0.40) return null;
+  const cx = rx * VILL + 40 + Math.floor(hash2(rx, rz, SEED + 901) * 80);
+  const cz = rz * VILL + 40 + Math.floor(hash2(rx, rz, SEED + 902) * 80);
+  const h = heightAt(cx, cz);
+  if (h <= SEA + 2 || h > 44) return null;
+  return { cx, cz, h };
+}
+function housesOf(v){
+  const out = [];
+  const n = 4 + Math.floor(hash2(v.cx, v.cz, SEED + 903) * 3);
+  for (let i = 0; i < n; i++){
+    const a = i / n * Math.PI * 2 + (hash2(v.cx + i, v.cz, SEED + 904) - .5) * 0.8;
+    const r = 11 + hash2(v.cx, v.cz + i, SEED + 905) * 13;
+    const x = Math.round(v.cx + Math.cos(a) * r), z = Math.round(v.cz + Math.sin(a) * r);
+    out.push({ x, z, r: hash2(x, z, SEED + 906) > .5 ? 3 : 2, h: heightAt(x, z) });
+  }
+  return out;
 }
 function treeAt(wx, wz){
   const h = heightAt(wx, wz);
@@ -646,6 +728,134 @@ function buildTiles(){
     if (handle < 2.0) return jit([116, 82, 46], n, 16);
     return [0, 0, 0, 0];
   });
+
+  /* 밭과 밀과 불 */
+  t[T.FARMLAND] = tile((x, y, n) => {
+    const row = y % 8, wet = row < 3;
+    const base = shift(jit([116, 82, 52], n, 14), (vn(x, y, 6, 211) - .5) * 20);
+    return wet ? [base[0] - 26, base[1] - 22, base[2] - 12] : base;   // 물을 머금은 고랑
+  });
+  const wheatTile = (stage) => tile((x, y, n) => {
+    const col = x % 8;
+    if (col > 2) return [0, 0, 0, 0];                                  // 줄기 네 대만 남긴다
+    const top = 26 - stage * 6.5;
+    if (y < top) return [0, 0, 0, 0];
+    const ripe = stage / 3;
+    const c = jit(mix3([92, 156, 62], [216, 178, 72], ripe), n, 22);
+    if (stage === 3 && y < top + 9 && col === 0) return jit([232, 196, 92], n, 20);   // 여문 이삭
+    return c;
+  });
+  t[T.WHEAT0] = wheatTile(0); t[T.WHEAT1] = wheatTile(1);
+  t[T.WHEAT2] = wheatTile(2); t[T.WHEAT3] = wheatTile(3);
+  t[T.FIRE] = tile((x, y, n) => {
+    const h = 12 + Math.abs(Math.sin(x * 0.42)) * 12 + vn(x, 0, 6, 301) * 10;
+    const base = TILE - h;
+    if (y < base) return [0, 0, 0, 0];
+    const f = (y - base) / h;                                          // 0 끝 · 1 뿌리
+    if (f < 0.18 && n > .55) return [0, 0, 0, 0];                      // 혀끝이 갈라진다
+    return [252, 96 + f * 150, 24 + f * 46, 238];
+  });
+
+  /* 상자와 화로 */
+  t[T.CHEST_SIDE] = tile((x, y, n) => {
+    if (y >= 13 && y <= 17) return jit([84, 56, 30], n, 8);             // 여닫는 띠
+    if (x > 13 && x < 19 && y >= 10 && y <= 21) return jit([198, 170, 92], n, 12);
+    return jit(shift([152, 108, 60], Math.sin(y * 0.9) * 7), n, 12);
+  });
+  t[T.CHEST_TOP] = tile((x, y, n) => {
+    const edge = x < 2 || y < 2 || x > 29 || y > 29;
+    return edge ? jit([100, 68, 36], n, 10) : jit(shift([158, 114, 64], Math.sin(x * 0.8) * 6), n, 12);
+  });
+  t[T.FURNACE_SIDE] = tile((x, y, n) => {
+    const stone = jit(shift([124, 124, 126], (vn(x, y, 8, 23) - .5) * 20), n, 12);
+    if (x > 6 && x < 25 && y > 12 && y < 28){                           // 아궁이
+      if (y > 22) return jit([196, 108, 40], n, 40);                    // 잉걸불
+      return jit([34, 32, 32], n, 12);
+    }
+    return stone;
+  });
+  t[T.FURNACE_TOP] = tile((x, y, n) => {
+    const d = Math.hypot(x - 15.5, y - 15.5);
+    const stone = jit(shift([124, 124, 126], (vn(x, y, 8, 23) - .5) * 20), n, 12);
+    return d < 7 ? jit([46, 44, 44], n, 14) : stone;
+  });
+
+  /* 주민 */
+  t[T.VILLAGER] = tile((x, y, n) => shift(jit([106, 74, 54], n, 12), (vn(x, y, 6, 221) - .5) * 16));
+  t[T.VILLAGER_FACE] = tile((x, y, n) => {
+    const skin = jit([196, 150, 120], n, 10);
+    if (y < 7) return jit([84, 62, 44], n, 10);                          // 머리카락
+    if (y > 12 && y < 22 && x > 12 && x < 20) return jit([176, 128, 100], n, 8);  // 큼직한 코
+    if (y > 9 && y < 14 && (Math.abs(x - 8) < 3 || Math.abs(x - 23) < 3)) return [28, 30, 38];
+    return skin;
+  });
+
+  /* 새로 든 물건 */
+  t[T.I_FLINT] = tile((x, y, n) => {
+    const d = Math.abs(x - 16) * 0.9 + Math.abs(y - 18) - 8 + (vn(x, y, 5, 231) - .5) * 4;
+    if (d > 0) return [0, 0, 0, 0];
+    if (d > -1.6) return [44, 44, 50, 255];
+    return jit([92, 92, 100], n, 26);
+  });
+  t[T.I_STEEL] = tile((x, y, n) => {
+    const bar = seg(x, y, 9, 10, 22, 10), hook = seg(x, y, 22, 10, 22, 22);
+    if (bar < 2.2 || hook < 2.2) return jit([192, 192, 200], n, 16);
+    const d = Math.hypot(x - 11, y - 22);
+    if (d < 6) return jit([74, 74, 82], n, 22);
+    return [0, 0, 0, 0];
+  });
+  t[T.I_HOE] = tile((x, y, n) => {
+    const handle = seg(x, y, 7, 27, 21, 11);
+    const head = seg(x, y, 13, 7, 26, 7);
+    if (head < 2.4) return jit([198, 200, 208], n, 12);
+    if (handle < 2.0) return jit([116, 82, 46], n, 16);
+    return [0, 0, 0, 0];
+  });
+  t[T.I_SEED] = tile((x, y, n) => {
+    for (const [sx, sy] of [[11,13],[19,11],[15,20],[22,20],[9,22]]){
+      if (Math.hypot((x - sx) / 2.6, (y - sy) / 1.8) < 1) return jit([146, 160, 84], n, 26);
+    }
+    return [0, 0, 0, 0];
+  });
+  t[T.I_WHEAT] = tile((x, y, n) => {
+    for (const sx of [10, 16, 22]){
+      const dx = Math.abs(x - sx - (y - 20) * 0.12);
+      if (dx < 1.4 && y > 8 && y < 28) return jit([206, 170, 70], n, 20);
+      if (dx < 3.2 && y > 8 && y < 18 && (y + Math.round(dx)) % 3 === 0) return jit([226, 192, 96], n, 18);
+    }
+    return [0, 0, 0, 0];
+  });
+  t[T.I_BREAD] = tile((x, y, n) => {
+    const d = Math.hypot((x - 16) / 11, (y - 17) / 6.5);
+    if (d > 1) return [0, 0, 0, 0];
+    if (d > .84) return [122, 74, 30, 255];
+    if (y < 15 && vn(x, y, 4, 241) > .58) return jit([214, 164, 96], n, 14);   // 갈라진 껍질
+    return jit([182, 128, 66], n, 16);
+  });
+  t[T.I_COOKED] = tile((x, y, n) => {
+    const d = Math.hypot((x - 16) / 10, (y - 17) / 7.5) + (vn(x, y, 5, 191) - .5) * .14;
+    if (d > 1) return [0, 0, 0, 0];
+    if (d > .86) return [86, 48, 26, 255];
+    if (vn(x, y, 4, 193) > .66) return jit([206, 166, 116], n, 14);
+    return jit([150, 92, 48], n, 18);
+  });
+  t[T.I_BUCKET] = tile((x, y, n) => {
+    const inset = (y - 10) * 0.28;
+    if (y < 9 || y > 26) return [0, 0, 0, 0];
+    if (x < 7 + inset || x > 25 - inset) return [0, 0, 0, 0];
+    if (y < 12 || y > 23) return jit([206, 206, 214], n, 12);
+    if (x < 9 + inset || x > 23 - inset) return jit([176, 176, 186], n, 12);
+    return jit([148, 148, 158], n, 10);
+  });
+  t[T.I_WBUCKET] = tile((x, y, n) => {
+    const inset = (y - 10) * 0.28;
+    if (y < 9 || y > 26) return [0, 0, 0, 0];
+    if (x < 7 + inset || x > 25 - inset) return [0, 0, 0, 0];
+    if (y < 12) return jit([206, 206, 214], n, 12);
+    if (y < 22 && x > 9 + inset && x < 23 - inset) return jit([52, 110, 196], n, 16);   // 담긴 물
+    if (y > 23) return jit([206, 206, 214], n, 12);
+    return jit([166, 166, 176], n, 12);
+  });
   return t;
 }
 
@@ -675,7 +885,21 @@ const world = {
   chunks: new Map(),
   edits: new Map(),          // "cx,cz" → Map(로컬번호 → 블록)
   lights: new Map(),         // "x,y,z" → [x,y,z] 빛나는 블록 자리
+  active: new Set(),         // 다음 번에 살펴볼 자리 (물 모래 …)
+  tiles: new Map(),          // "x,y,z" → 상자와 화로 속
+  crops: new Map(),          // "x,y,z" → 다음 자람 시각
+  fires: new Set(),          // "x,y,z" → 타고 있는 자리
   _ck: null, _c: null,
+
+  wake(x, y, z){
+    this.active.add(x + ',' + y + ',' + z);
+    this.active.add(x + ',' + (y + 1) + ',' + z);
+    this.active.add(x + ',' + (y - 1) + ',' + z);
+    this.active.add((x + 1) + ',' + y + ',' + z);
+    this.active.add((x - 1) + ',' + y + ',' + z);
+    this.active.add(x + ',' + y + ',' + (z + 1));
+    this.active.add(x + ',' + y + ',' + (z - 1));
+  },
 
   chunk(cx, cz){
     const k = key(cx, cz);
@@ -710,6 +934,11 @@ const world = {
     const lk = x + ',' + y + ',' + z;
     if (id !== AIR && BLOCKS[id].emit) this.lights.set(lk, [x + .5, y + .5, z + .5]);
     else if (old !== AIR && BLOCKS[old] && BLOCKS[old].emit) this.lights.delete(lk);
+    if (id === FIRE) this.fires.add(lk); else if (old === FIRE) this.fires.delete(lk);
+    if (BLOCKS[id] && BLOCKS[id].crop !== undefined) this.crops.set(lk, performance.now() + CROP_TIME);
+    else if (old && BLOCKS[old] && BLOCKS[old].crop !== undefined) this.crops.delete(lk);
+    if (old === CHEST || old === FURNACE) this.tiles.delete(lk);
+    this.wake(x, y, z);
     if (record){
       const k = key(cx, cz);
       let m = this.edits.get(k);
@@ -721,6 +950,32 @@ const world = {
     if (lx === 0) touch(-1, 0); if (lx === 15) touch(1, 0);
     if (lz === 0) touch(0, -1); if (lz === 15) touch(0, 1);
     return true;
+  },
+
+  buildHouse(b, ox, oz, hs){
+    const r = hs.r, y0 = hs.h;
+    if (Math.abs(hs.x - ox - 8) > CX + r * 2 || Math.abs(hs.z - oz - 8) > CZ + r * 2) return;
+    const put = (wx, wy, wz, id) => {
+      const x = wx - ox, z = wz - oz;
+      if (x < 0 || x >= CX || z < 0 || z >= CZ || wy < 1 || wy >= CH) return;
+      b[IDX(x, wy, z)] = id;
+      if (id === 17) this.lights.set(wx + ',' + wy + ',' + wz, [wx + .5, wy + .5, wz + .5]);
+    };
+    for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++){
+      const wx = hs.x + dx, wz = hs.z + dz;
+      const edge = Math.abs(dx) === r || Math.abs(dz) === r;
+      for (let y = y0 - 4; y < y0; y++) put(wx, y, wz, 4);            // 주춧돌
+      put(wx, y0, wz, 8);                                              // 바닥
+      for (let y = y0 + 1; y <= y0 + 3; y++){
+        if (!edge){ put(wx, y, wz, AIR); continue; }
+        const win = y === y0 + 2 && (Math.abs(dx) + Math.abs(dz)) % 2 === 0 && !(Math.abs(dx) === r && Math.abs(dz) === r);
+        put(wx, y, wz, win ? 11 : 8);
+      }
+      put(wx, y0 + 4, wz, 4);                                          // 지붕
+    }
+    put(hs.x, y0 + 1, hs.z + r, AIR);                                  // 문
+    put(hs.x, y0 + 2, hs.z + r, AIR);
+    put(hs.x, y0 + 3, hs.z, 17);                                       // 천장에 빛돌 하나
   },
 
   generate(c){
@@ -747,10 +1002,20 @@ const world = {
         }
       }
     }
+    // 마을이 이 청크에 걸치는지 먼저 본다 나무가 집을 뚫지 않게
+    const houses = [];
+    const rx0 = Math.floor(ox / VILL), rz0 = Math.floor(oz / VILL);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) for (let rz = rz0 - 1; rz <= rz0 + 1; rz++){
+      const v = villageAt(rx, rz);
+      if (v) for (const hs of housesOf(v)) houses.push(hs);
+    }
     for (let dz = -3; dz < CZ + 3; dz++) for (let dx = -3; dx < CX + 3; dx++){
       const wx = ox + dx, wz = oz + dz;
       const trunk = treeAt(wx, wz);
       if (!trunk) continue;
+      let near = false;
+      for (const hs of houses) if (Math.abs(wx - hs.x) <= hs.r + 3 && Math.abs(wz - hs.z) <= hs.r + 3) near = true;
+      if (near) continue;                                  // 집 둘레에는 나무를 세우지 않는다
       const base = heightAt(wx, wz) + 1;
       const put = (x, y, z, id, soft) => {
         if (x < 0 || x >= CX || z < 0 || z >= CZ || y < 0 || y >= CH) return;
@@ -769,9 +1034,16 @@ const world = {
       }
       put(dx, ct + 1, dz, 7, true);
     }
+    for (const hs of houses) this.buildHouse(b, ox, oz, hs);   // 집은 나무보다 나중에 선다
+
     const m = this.edits.get(key(c.cx, c.cz));
     if (m) for (const [i, id] of m){
       b[i] = id;
+      if (id === FIRE){
+        const y = Math.floor(i / (CX * CZ)), rr = i - y * CX * CZ;
+        const z = Math.floor(rr / CX), x = rr - z * CX;
+        this.fires.add((ox + x) + ',' + y + ',' + (oz + z));
+      }
       if (id !== AIR && BLOCKS[id].emit){
         const y = Math.floor(i / (CX * CZ)), r = i - y * CX * CZ;
         const z = Math.floor(r / CX), x = r - z * CX;
@@ -787,7 +1059,113 @@ const world = {
   },
 };
 
-/* ---------- 10. 면 굽기 ---------- */
+/* ---------- 10. 스스로 움직이는 것들 ---------- */
+// 물은 흐르고 모래는 떨어지고 불은 옮겨 붙고 밀은 자란다
+// 온 세상을 훑지 않는다 바뀐 자리와 그 이웃만 목록에 넣고 그것만 살핀다
+const CROP_TIME = 22000;                 // 한 단계 자라는 데 걸리는 밀리초
+const TICK = 0.1, FIRE_TICK = 0.4;
+const FLAMMABLE = new Set([6, 7, 8, 18, 20, 21, 22, 23]);
+const FALLS = new Set([5, 14]);          // 모래와 자갈
+let tickAcc = 0, fireAcc = 0;
+
+function flowInto(x, y, z, lvl){
+  const cur = world.getBlock(x, y, z);
+  if (cur === AIR || (isWater(cur) && flowOf(cur) > lvl)){
+    world.setBlock(x, y, z, FLOW0 + lvl - 1, true);
+    return true;
+  }
+  return false;
+}
+function updateCell(k){
+  const c = k.split(',');
+  const x = +c[0], y = +c[1], z = +c[2];
+  if (!world.loaded(x, z)) return;
+  const id = world.getBlock(x, y, z);
+  if (id === AIR) return;
+
+  if (FALLS.has(id)){                                     // 모래와 자갈은 받쳐 주는 것이 없으면 떨어진다
+    const below = world.getBlock(x, y - 1, z);
+    if (below === AIR || isWater(below)){
+      world.setBlock(x, y - 1, z, id, true);
+      world.setBlock(x, y, z, AIR, true);
+    }
+    return;
+  }
+  if (BLOCKS[id].crop !== undefined){                     // 밭이 사라지면 밀도 죽는다
+    if (world.getBlock(x, y - 1, z) !== FARM) world.setBlock(x, y, z, AIR, true);
+    return;
+  }
+  if (!isWater(id)) return;
+
+  const lvl = flowOf(id);
+  const below = world.getBlock(x, y - 1, z);
+  if (below === AIR || (isWater(below) && flowOf(below) > 1)){
+    flowInto(x, y - 1, z, 1);                             // 아래로 먼저 떨어진다
+    if (lvl > 0) return;
+  }
+  if (lvl > 0){                                           // 샘이 아니면 기댈 데가 있어야 남는다
+    let fed = isWater(world.getBlock(x, y + 1, z));
+    if (!fed){
+      for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const n = world.getBlock(x + dx, y, z + dz);
+        if (isWater(n) && flowOf(n) < lvl){ fed = true; break; }
+      }
+    }
+    if (!fed){ world.setBlock(x, y, z, AIR, true); return; }
+  }
+  const under = world.getBlock(x, y - 1, z);
+  if (lvl < FLOW_MAX && under !== AIR && !(isWater(under) && flowOf(under) > 1)){
+    for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) flowInto(x + dx, y, z + dz, lvl + 1);
+  }
+}
+function simStep(){
+  if (world.active.size){
+    const list = world.active;
+    world.active = new Set();
+    let n = 0;
+    for (const k of list){
+      if (n++ > 900){ world.active.add(k); continue; }    // 한 번에 다 하지 않는다
+      updateCell(k);
+    }
+  }
+  for (const t of world.tiles.values()) if (t.t === 'furnace') furnaceTick(t, TICK);
+  if (world.crops.size){                                   // 밀이 자란다
+    const now = performance.now();
+    for (const [k, at] of world.crops){
+      if (now < at) continue;
+      const c = k.split(','), x = +c[0], y = +c[1], z = +c[2];
+      const id = world.getBlock(x, y, z);
+      if (BLOCKS[id] && BLOCKS[id].crop !== undefined && BLOCKS[id].crop < 3) world.setBlock(x, y, z, id + 1, true);
+      else world.crops.delete(k);                          // 다 익었거나 뽑혔으면 더 볼 것이 없다
+    }
+  }
+}
+function simTick(dt){
+  tickAcc += dt;
+  let guard = 0;
+  while (tickAcc >= TICK && guard++ < 4){ tickAcc -= TICK; simStep(); }
+  if (tickAcc > 1) tickAcc = 0;                            // 한참 멈췄다 돌아와도 몰아치지 않는다
+
+  fireAcc += dt;
+  if (fireAcc >= FIRE_TICK && world.fires.size){
+    fireAcc = 0;
+    for (const k of [...world.fires]){
+      const c = k.split(','), x = +c[0], y = +c[1], z = +c[2];
+      if (world.getBlock(x, y, z) !== FIRE){ world.fires.delete(k); continue; }
+      const around = [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,1,0],[0,-1,0]];
+      let feeds = false;
+      for (const [dx, dy, dz] of around){                  // 닿는 것마다 옮겨 붙는다
+        const n = world.getBlock(x + dx, y + dy, z + dz);
+        if (!FLAMMABLE.has(n)) continue;
+        feeds = true;
+        if (Math.random() < 0.34) world.setBlock(x + dx, y + dy, z + dz, FIRE, true);
+      }
+      if (!feeds ? Math.random() < 0.5 : Math.random() < 0.12) world.setBlock(x, y, z, AIR, true);
+    }
+  }
+}
+
+/* ---------- 11. 면 굽기 ---------- */
 // 정점 하나에 여덟 숫자: 자리(3) uv(2) 층(1) 그늘(1) 빛(1)
 const FACES = [
   { n:[0,1,0],  v:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]], uv:[[0,0],[0,1],[1,1],[1,0]], ax:[0,2], shade:1.00, tex:0 },
@@ -822,6 +1200,29 @@ class Buf {
 }
 const bufO = new Buf(), bufW = new Buf();
 
+// 밀과 불은 상자가 아니라 엇갈린 두 장이다 앞뒤로 다 보이게 네 번 굽는다
+const CROSS_A = 0.1465, CROSS_B = 0.8535;
+function emitCross(buf, x, y, z, layer, light){
+  const a = CROSS_A, b = CROSS_B;
+  const planes = [
+    [[a,0,a],[b,0,b],[b,1,b],[a,1,a]],
+    [[a,0,b],[b,0,a],[b,1,a],[a,1,b]],
+  ];
+  for (const q of planes) for (let back = 0; back < 2; back++){
+    buf.room(4, 6);
+    const v0 = buf.nv / VSIZE;
+    const order = back ? [3, 2, 1, 0] : [0, 1, 2, 3];
+    const uvs = back ? [[0,0],[1,0],[1,1],[0,1]] : [[0,1],[1,1],[1,0],[0,0]];
+    for (let k = 0; k < 4; k++){
+      const c = q[order[k]], uv = uvs[k];
+      buf.push(x + c[0], y + c[1], z + c[2], uv[0], uv[1], layer, 0.96, light);
+    }
+    const I = buf.i;
+    I[buf.ni++] = v0;   I[buf.ni++] = v0+1; I[buf.ni++] = v0+2;
+    I[buf.ni++] = v0;   I[buf.ni++] = v0+2; I[buf.ni++] = v0+3;
+  }
+}
+
 const PX = CX + 2, PZ = CZ + 2;
 const pad = new Uint8Array(PX * (CH + 2) * PZ);
 const padH = new Int16Array(PX * PZ);
@@ -850,14 +1251,19 @@ function buildMesh(c){
   for (let y = 0; y < CH; y++) for (let z = 0; z < CZ; z++) for (let x = 0; x < CX; x++){
     const id = pad[PI(x, y, z)];
     if (id === AIR) continue;
-    const def = BLOCKS[id], water = id === WATER;
+    const def = BLOCKS[id], water = isWater(id);
     const buf = water ? bufW : bufO;
+    if (def.cross){
+      const lit = def.emit ? 2 : (y > padH[(z + 1) * PX + (x + 1)] - 1 ? 1 : 0);
+      emitCross(bufO, x, y, z, def.L[0], lit);
+      continue;
+    }
     for (let f = 0; f < 6; f++){
       const F = FACES[f], nx = x + F.n[0], ny = y + F.n[1], nz = z + F.n[2];
       const nb = pad[PI(nx, ny, nz)];
       if (nb !== AIR){
         if (isOpaque(nb) || nb === id) continue;
-        if (water) continue;
+        if (water) continue;                               // 물끼리도 잎 뒤에서도 굳이 그리지 않는다
       }
       // 빛: 하늘이 닿으면 1 아니면 0 스스로 빛나는 블록은 2
       const light = def.emit ? 2 : (ny > padH[(nz + 1) * PX + (nx + 1)] ? 1 : 0);
@@ -892,7 +1298,7 @@ function buildMesh(c){
   }
 }
 
-/* ---------- 11. 작은 행렬 도구 ---------- */
+/* ---------- 12. 작은 행렬 도구 ---------- */
 function perspective(out, fovy, aspect, near, far){
   const f = 1 / Math.tan(fovy / 2);
   out.fill(0);
@@ -948,7 +1354,7 @@ function boxVisible(x0, y0, z0, x1, y1, z1){
   return true;
 }
 
-/* ---------- 12. WebGL ---------- */
+/* ---------- 13. WebGL ---------- */
 const cv = document.getElementById('gl');
 const gl = cv.getContext('webgl2', { antialias:true, alpha:false, powerPreference:'high-performance' });
 if (!gl){
@@ -1091,7 +1497,7 @@ out vec4 outColor;
 void main(){ outColor = uColor; }`);
 const UL = uni(progLine, 'vp', 'origin', 'grow', 'color');
 
-/* ---------- 13. 텍스처와 정점 그릇 ---------- */
+/* ---------- 14. 텍스처와 정점 그릇 ---------- */
 const tex = gl.createTexture();
 const tiles = buildTiles();
 gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
@@ -1176,11 +1582,10 @@ const lineVao = gl.createVertexArray();
   gl.bindVertexArray(null);
 }
 
-/* ---------- 14. 해와 달 ---------- */
+/* ---------- 15. 해와 달 ---------- */
 // time 0 = 해 뜰 때 · 0.25 = 한낮 · 0.5 = 해 질 때 · 0.75 = 한밤
 const sky = { time:0.06, frozen:false, sun:[0,1,0], height:0,
               top:[0,0,0], horizon:[0,0,0], sunColor:[1,1,1], night:0, day:1, tint:[1,1,1] };
-const mix3 = (a, b, t) => [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)];
 const sstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 const NIGHT_TOP = [0.016,0.026,0.075], NIGHT_HOR = [0.05,0.07,0.16];
 const DAY_TOP   = [0.24,0.47,0.86],    DAY_HOR   = [0.63,0.80,0.96];
@@ -1214,7 +1619,7 @@ function timeName(){
 }
 const isNight = () => sky.height < -0.05;
 
-/* ---------- 15. 몹 ---------- */
+/* ---------- 16. 몹 ---------- */
 // 몸은 단위 상자 몇 개다 p: 왼아래앞 구석 · s: 크기 · sw: 걸을 때 흔들리는 짝
 const MOBS = {
   pig: { name:'돼지', hp:10, w:0.46, h:0.86, speed:1.5, drop:[103,2], tint:[1,1,1],
@@ -1246,6 +1651,16 @@ const MOBS = {
       { p:[ 0.23,0.72,-0.09], s:[0.17,0.60,0.17], tex:T.ZOMBIE, sw:-1, pv:0.72, fix:-1.35 },
       { p:[-0.21,0.00,-0.09], s:[0.18,0.72,0.18], tex:T.ZOMBIE, sw:-1, pv:0.72 },
       { p:[ 0.03,0.00,-0.09], s:[0.18,0.72,0.18], tex:T.ZOMBIE, sw:1, pv:0.72 },
+    ] },
+  villager: { name:'주민', hp:14, w:0.44, h:1.82, speed:1.35, tint:[1,1,1],
+    parts:[
+      { p:[-0.22,0.70,-0.14], s:[0.44,0.64,0.28], tex:T.VILLAGER },
+      { p:[-0.22,1.34,-0.15], s:[0.44,0.44,0.30], tex:T.VILLAGER },
+      { p:[-0.22,1.34,-0.18], s:[0.44,0.44,0.04], tex:T.VILLAGER_FACE },
+      { p:[-0.38,0.72,-0.10], s:[0.16,0.58,0.20], tex:T.VILLAGER, sw:1, pv:0.72 },
+      { p:[ 0.22,0.72,-0.10], s:[0.16,0.58,0.20], tex:T.VILLAGER, sw:-1, pv:0.72 },
+      { p:[-0.21,0.00,-0.09], s:[0.18,0.72,0.18], tex:T.VILLAGER, sw:-1, pv:0.72 },
+      { p:[ 0.03,0.00,-0.09], s:[0.18,0.72,0.18], tex:T.VILLAGER, sw:1, pv:0.72 },
     ] },
 };
 const mobs = [];
@@ -1305,6 +1720,19 @@ function spawnTick(dt){
     const s = mobSpot(14, 30);
     if (s) spawnMob(Math.random() < 0.55 ? 'pig' : 'sheep', s[0], s[1], s[2]);
   }
+  // 마을이 가까우면 주민이 서넛 거닌다
+  const folk = mobs.filter(m => m.kind === 'villager').length;
+  if (folk < 4){
+    const rx0 = Math.floor(player.x / VILL), rz0 = Math.floor(player.z / VILL);
+    for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) for (let rz = rz0 - 1; rz <= rz0 + 1; rz++){
+      const v = villageAt(rx, rz);
+      if (!v) continue;
+      if (Math.hypot(v.cx - player.x, v.cz - player.z) > 56) continue;
+      const s = mobSpot(6, 26);
+      if (s) spawnMob('villager', s[0], s[1], s[2]);
+      return;
+    }
+  }
 }
 function updateMobs(dt){
   for (let i = mobs.length - 1; i >= 0; i--){
@@ -1335,6 +1763,9 @@ function updateMobs(dt){
       }
       go = m.mode ? 0.85 : 0;
       if (m.flee > 0){ m.flee -= dt; go = 1.3; }
+    }
+    if (world.getBlock(Math.floor(m.x), Math.floor(m.y + 0.2), Math.floor(m.z)) === FIRE){
+      m.hp -= dt * 5; m.hurt = Math.max(m.hurt, 0.12);
     }
     if (m.hp <= 0){ killMob(i); continue; }
 
@@ -1398,7 +1829,7 @@ function mobInSight(maxT){
   return best;
 }
 
-/* ---------- 16. 사람 ---------- */
+/* ---------- 17. 사람 ---------- */
 const player = { x:0.5, y:70, z:0.5, vx:0, vy:0, vz:0, yaw:0, pitch:0,
                  ground:false, fly:false, water:false, head:false,
                  hp:MAX_HP, hurt:0, inv:0, fallFrom:null, alive:true, swing:0 };
@@ -1436,6 +1867,8 @@ function updatePlayer(dt){
   player.water = world.getBlock(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)) === WATER;
   player.head  = world.getBlock(Math.floor(player.x), Math.floor(eye), Math.floor(player.z)) === WATER;
   player.hurt = Math.max(0, player.hurt - dt);
+  const feet = world.getBlock(Math.floor(player.x), Math.floor(player.y + 0.2), Math.floor(player.z));
+  if (feet === FIRE) hurtPlayer(2, '불에 탔다');
   player.swing = Math.max(0, player.swing - dt * 3);
 
   let fx = 0, fz = 0;
@@ -1554,8 +1987,8 @@ function findSpawn(){
   return { x:0.5, z:0.5 };
 }
 
-/* ---------- 17. 캐기 · 놓기 · 때리기 ---------- */
-function raycast(){
+/* ---------- 18. 캐기 · 놓기 · 때리기 ---------- */
+function raycast(wet){
   const [dx, dy, dz] = forwardVec();
   const ox = player.x, oy = player.y + EYE, oz = player.z;
   let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
@@ -1569,7 +2002,7 @@ function raycast(){
   let nx = 0, ny = 0, nz = 0, t = 0;
   for (let i = 0; i < 160 && t <= REACH; i++){
     const id = world.getBlock(x, y, z);
-    if (id !== AIR && !BLOCKS[id].fluid) return { x, y, z, nx, ny, nz, t };
+    if (id !== AIR && (wet || !BLOCKS[id].fluid)) return { x, y, z, nx, ny, nz, t, id };
     if (tX < tY && tX < tZ){ x += sx; t = tX; tX += dX; nx = -sx; ny = 0; nz = 0; }
     else if (tY < tZ){ y += sy; t = tY; tY += dY; nx = 0; ny = -sy; nz = 0; }
     else { z += sz; t = tZ; tZ += dZ; nx = 0; ny = 0; nz = -sz; }
@@ -1610,29 +2043,104 @@ function updateBreak(dt){
   showBar(breakProg);
   if (breakProg >= 1){
     breakProg = 0;
-    const drop = def.drop !== undefined ? def.drop : id;
-    world.setBlock(hit.x, hit.y, hit.z, AIR, true);
-    if (drop) give(drop, 1);
+    harvest(hit.x, hit.y, hit.z, id, def);
   }
 }
-function placeBlock(){
-  const id = held();
-  if (!isBlockItem(id)){ if (id) toast(itemName(id) + ' 는 놓을 수 없다'); return; }
-  const hit = raycast();
-  if (!hit) return;
-  const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
-  const cur = world.getBlock(x, y, z);
-  if (cur !== AIR && cur !== WATER) return;
+// 캔 자리에서 나오는 것 · 밀과 잔디와 자갈은 덤이 따로 있다
+function harvest(x, y, z, id, def){
+  const tile = world.tiles.get(x + ',' + y + ',' + z);
+  if (tile){                                              // 상자와 화로 속은 돌려준다
+    if (tile.t === 'chest') for (const it of tile.items) give(it[0], it[1]);
+    else for (const sl of ['in', 'fuel', 'out']) if (tile[sl]) give(tile[sl][0], tile[sl][1]);
+  }
+  world.setBlock(x, y, z, AIR, true);
+  if (def.crop !== undefined){
+    give(109, 1);
+    if (def.crop === 3){ give(110, 1); if (Math.random() < 0.5) give(109, 1); }
+    return;
+  }
+  const drop = def.drop !== undefined ? def.drop : id;
+  if (drop) give(drop, 1);
+  if (id === 1 && Math.random() < 0.28) give(109, 1);      // 잔디에서 씨앗이 나온다
+  if (id === 14 && Math.random() < 0.18) give(106, 1);     // 자갈에서 부싯돌이 나온다
+}
+function blocked(x, y, z){
   if (x + 1 > player.x - PW && x < player.x + PW &&
       z + 1 > player.z - PW && z < player.z + PW &&
-      y + 1 > player.y && y < player.y + PH) return;
-  for (const m of mobs){                                  // 몹 안에는 놓지 못한다
+      y + 1 > player.y && y < player.y + PH) return true;
+  for (const m of mobs){
     if (x + 1 > m.x - m.def.w && x < m.x + m.def.w &&
         z + 1 > m.z - m.def.w && z < m.z + m.def.w &&
-        y + 1 > m.y && y < m.y + m.def.h) return;
+        y + 1 > m.y && y < m.y + m.def.h) return true;
   }
+  return false;
+}
+function placeBlock(){
+  const id = held(), it = ITEMS[id];
+  const hit = raycast();
+
+  // 1. 상자와 화로는 열린다
+  if (hit){
+    const target = world.getBlock(hit.x, hit.y, hit.z);
+    if (target === CHEST || target === FURNACE){ openTile(hit.x, hit.y, hit.z, target); return; }
+  }
+  // 2. 양동이로 물을 뜨고 붓는다
+  if (it && it.bucket){
+    const wet = raycast(true);
+    if (wet && isWater(wet.id)){
+      world.setBlock(wet.x, wet.y, wet.z, AIR, true);
+      take(113, 1); give(114, 1);
+      toast('물을 떴다');
+    } else toast('물가에서 떠야 한다');
+    return;
+  }
+  if (it && it.water){
+    if (!hit) return;
+    const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
+    if (world.getBlock(x, y, z) !== AIR || blocked(x, y, z)) return;
+    world.setBlock(x, y, z, WATER, true);
+    take(114, 1); give(113, 1);
+    toast('물을 부었다');
+    return;
+  }
+  if (!hit) return;
+  const target = world.getBlock(hit.x, hit.y, hit.z);
+  const above = world.getBlock(hit.x, hit.y + 1, hit.z);
+  // 3. 괭이로 밭을 간다
+  if (it && it.hoe){
+    if ((target === 1 || target === 2) && above === AIR){
+      world.setBlock(hit.x, hit.y, hit.z, FARM, true);
+      player.swing = 1;
+      toast('밭을 갈았다');
+    } else toast('잔디나 흙 위에서 갈 수 있다');
+    return;
+  }
+  // 4. 씨앗을 심는다
+  if (it && it.seed){
+    if (target === FARM && above === AIR){
+      if (!take(109, 1)) return;
+      world.setBlock(hit.x, hit.y + 1, hit.z, CROP0, true);
+      player.swing = 1;
+    } else toast('갈아 둔 밭에 심는다');
+    return;
+  }
+  // 5. 부시로 불을 붙인다
+  if (it && it.lighter){
+    const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
+    if (world.getBlock(x, y, z) !== AIR || blocked(x, y, z)) return;
+    world.setBlock(x, y, z, FIRE, true);
+    player.swing = 1;
+    return;
+  }
+  if (!isBlockItem(id)){ if (id) toast(itemName(id) + ' 는 놓을 수 없다'); return; }
+  const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
+  const cur = world.getBlock(x, y, z);
+  if (cur !== AIR && !isWater(cur)) return;
+  if (blocked(x, y, z)) return;                            // 제 몸이나 몹 안에는 놓지 못한다
   if (!take(id, 1)) return;
   world.setBlock(x, y, z, id, true);
+  if (id === CHEST) world.tiles.set(x + ',' + y + ',' + z, { t:'chest', items:[] });
+  if (id === FURNACE) world.tiles.set(x + ',' + y + ',' + z, { t:'furnace', in:null, fuel:null, out:null, burn:0, burnMax:0, cook:0 });
   player.swing = 1;
 }
 function pickBlock(){
@@ -1651,7 +2159,7 @@ function eat(){
   toast(itemName(f.id) + ' 를 먹었다');
 }
 
-/* ---------- 18. 제작 ---------- */
+/* ---------- 19. 제작 ---------- */
 const grid = new Array(9).fill(0);
 let pickId = 0;                                           // 가방에서 집어 든 재료
 function trim(cells){
@@ -1719,8 +2227,129 @@ function fillRecipe(r){
   renderInv();
 }
 
-/* ---------- 19. 화면 ---------- */
-const $ = (id) => document.getElementById(id);
+/* ---------- 19.5. 상자와 화로 ---------- */
+let tilePanel = null;
+const smeltOf = (id) => SMELT.find(r => r[0] === id);
+function openTile(x, y, z, kind){
+  const k = x + ',' + y + ',' + z;
+  let t = world.tiles.get(k);
+  if (!t){
+    t = kind === CHEST ? { t:'chest', items:[] }
+                       : { t:'furnace', in:null, fuel:null, out:null, burn:0, burnMax:0, cook:0 };
+    world.tiles.set(k, t);
+  }
+  tilePanel = { k, t };
+  invOpen = true;
+  $('tile').classList.add('on');
+  renderTile();
+  document.exitPointerLock && document.exitPointerLock();
+}
+function closeTile(){
+  tilePanel = null;
+  $('tile').classList.remove('on');
+  invOpen = false;
+  saveSoon();
+  if (playing && !isTouch) requestLock();
+}
+function slotCell(pair, onClick, big){
+  const c = document.createElement('div');
+  c.className = 'cell' + (big ? ' out' : '');
+  if (pair){
+    c.title = itemName(pair[0]);
+    c.appendChild(iconOf(itemTex(pair[0])));
+    const u = document.createElement('u'); u.textContent = pair[1]; c.appendChild(u);
+  }
+  if (onClick) c.addEventListener('click', onClick);
+  return c;
+}
+function renderTile(){
+  if (!tilePanel) return;
+  const t = tilePanel.t, body = $('tileBody');
+  body.innerHTML = '';
+  if (t.t === 'chest'){
+    $('tileName').textContent = '상자';
+    $('tileHint').textContent = '상자 칸을 누르면 가방으로 · 가방 칸을 누르면 상자로 옮긴다 스물다섯 칸까지 들어간다';
+    const g = document.createElement('div');
+    g.className = 'bag';
+    for (let i = 0; i < 25; i++){
+      const it = t.items[i];
+      g.appendChild(slotCell(it, () => {
+        if (!t.items[i]) return;
+        give(t.items[i][0], t.items[i][1]);
+        t.items.splice(i, 1);
+        renderTile(); saveSoon();
+      }));
+    }
+    body.appendChild(g);
+  } else {
+    $('tileName').textContent = '화로';
+    $('tileHint').textContent = '가방에서 구울 것과 땔감을 누른다 석탄 나무판자 통나무 막대기가 땔감이다';
+    const row = document.createElement('div');
+    row.className = 'fire';
+    const lab = (s) => { const d = document.createElement('div'); d.className = 'lab'; d.textContent = s; return d; };
+    row.appendChild(lab('구울 것'));
+    row.appendChild(slotCell(t.in, () => { if (t.in){ give(t.in[0], t.in[1]); t.in = null; renderTile(); } }));
+    row.appendChild(lab('땔감'));
+    row.appendChild(slotCell(t.fuel, () => { if (t.fuel){ give(t.fuel[0], t.fuel[1]); t.fuel = null; renderTile(); } }));
+    const arrow = document.createElement('div'); arrow.className = 'arrow'; arrow.textContent = '→';
+    row.appendChild(arrow);
+    row.appendChild(slotCell(t.out, () => { if (t.out){ give(t.out[0], t.out[1]); t.out = null; renderTile(); } }, true));
+    body.appendChild(row);
+    const bars = document.createElement('div');
+    bars.className = 'fire';
+    const r = t.in ? smeltOf(t.in[0]) : null;
+    const g1 = document.createElement('div'); g1.className = 'gauge heat';
+    g1.innerHTML = `<i style="width:${t.burnMax ? Math.max(0, t.burn / t.burnMax) * 100 : 0}%"></i>`;
+    const g2 = document.createElement('div'); g2.className = 'gauge';
+    g2.innerHTML = `<i style="width:${r ? Math.min(100, t.cook / r[2] * 100) : 0}%"></i>`;
+    bars.appendChild(lab('불')); bars.appendChild(g1);
+    bars.appendChild(lab('익는 중')); bars.appendChild(g2);
+    body.appendChild(bars);
+  }
+  const b = $('tileBag');
+  b.innerHTML = '';
+  for (const e of bag){
+    b.appendChild(slotCell([e.id, e.n], () => {
+      if (t.t === 'chest'){
+        if (t.items.length >= 25){ toast('상자가 꽉 찼다'); return; }
+        const same = t.items.find(i => i[0] === e.id);
+        if (same) same[1] += e.n; else t.items.push([e.id, e.n]);
+        take(e.id, e.n);
+      } else {
+        if (smeltOf(e.id) && (!t.in || t.in[0] === e.id)){
+          t.in = t.in ? [e.id, t.in[1] + 1] : [e.id, 1];
+          take(e.id, 1);
+        } else if (FUEL[e.id] && (!t.fuel || t.fuel[0] === e.id)){
+          t.fuel = t.fuel ? [e.id, t.fuel[1] + 1] : [e.id, 1];
+          take(e.id, 1);
+        } else { toast(itemName(e.id) + ' 는 여기 들어가지 않는다'); return; }
+      }
+      renderTile(); saveSoon();
+    }));
+  }
+}
+function furnaceTick(t, dt){
+  const r = t.in ? smeltOf(t.in[0]) : null;
+  const room = r && (!t.out || t.out[0] === r[1]);
+  if (t.burn > 0){
+    t.burn -= dt;
+    if (r && room){
+      t.cook += dt;
+      if (t.cook >= r[2]){
+        t.cook = 0;
+        t.in[1]--; if (t.in[1] <= 0) t.in = null;
+        t.out = t.out ? [r[1], t.out[1] + 1] : [r[1], 1];
+      }
+    } else t.cook = 0;
+  } else if (r && room && t.fuel && FUEL[t.fuel[0]]){
+    t.burn = t.burnMax = FUEL[t.fuel[0]];
+    t.fuel[1]--; if (t.fuel[1] <= 0) t.fuel = null;
+  } else t.cook = Math.max(0, t.cook - dt);
+  if (tilePanel && tilePanel.t === t) renderTile();
+}
+$('tileClose').addEventListener('click', closeTile);
+
+/* ---------- 20. 화면 ---------- */
 const elMenu = $('menu'), elHud = $('hud'), elToast = $('toast'), elName = $('slotname'),
       elInv = $('inv'), elBar = $('bar'), elBarFill = elBar.firstElementChild, elHurt = $('hurt');
 let playing = false, invOpen = false, toastTimer = 0, nameTimer = 0, hurtTimer = 0;
@@ -1890,7 +2519,7 @@ function drawClock(){
   $('clockText').textContent = timeName();
 }
 
-/* ---------- 20. 손과 눈 ---------- */
+/* ---------- 21. 손과 눈 ---------- */
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const touch = { mx:0, mz:0, jump:false, dig:false, lookId:-1, lx:0, ly:0, stickId:-1 };
 let mouseL = false, mouseR = false, placeTimer = 0, lastSpace = 0;
@@ -1952,11 +2581,12 @@ window.addEventListener('wheel', (e) => {
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape'){
-    if (invOpen) toggleInv(false);
+    if (tilePanel) closeTile();
+    else if (invOpen) toggleInv(false);
     else if (playing){ stop(); document.exitPointerLock && document.exitPointerLock(); }
     return;
   }
-  if (e.code === 'KeyE'){ if (playing) toggleInv(); return; }
+  if (e.code === 'KeyE'){ if (tilePanel) closeTile(); else if (playing) toggleInv(); return; }
   if (!playing || invOpen) return;
   if (e.code === 'F3'){ e.preventDefault(); elHud.classList.toggle('on'); return; }
   if (e.code.startsWith('Digit')){
@@ -1981,8 +2611,9 @@ window.addEventListener('blur', () => { keys.clear(); mouseL = mouseR = false; }
 
 {
   const stick = $('stick'), knob = $('knob');
+  const grab = (el, e) => { try { el.setPointerCapture && el.setPointerCapture(e.pointerId); } catch { /* 손가락이 이미 떨어졌다 */ } };
   stick.addEventListener('pointerdown', (e) => {
-    stick.setPointerCapture && stick.setPointerCapture(e.pointerId);
+    grab(stick, e);
     touch.stickId = e.pointerId; e.preventDefault();
   });
   stick.addEventListener('pointermove', (e) => {
@@ -2016,9 +2647,7 @@ window.addEventListener('blur', () => { keys.clear(); mouseL = mouseR = false; }
   cv.addEventListener('pointercancel', lookEnd);
 
   const hold = (el, down, up) => {
-    el.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); el.setPointerCapture && el.setPointerCapture(e.pointerId); down();
-    });
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); grab(el, e); down(); });
     el.addEventListener('pointerup', (e) => { e.preventDefault(); up && up(); });
     el.addEventListener('pointercancel', () => up && up());
   };
@@ -2028,7 +2657,7 @@ window.addEventListener('blur', () => { keys.clear(); mouseL = mouseR = false; }
   $('bBag').addEventListener('click', () => toggleInv());
 }
 
-/* ---------- 21. 메뉴와 저장 ---------- */
+/* ---------- 22. 메뉴와 저장 ---------- */
 const elSeed = $('seed');
 let saveTimer = 0, saved = null;
 function saveSoon(){ clearTimeout(saveTimer); saveTimer = setTimeout(save, 700); }
@@ -2036,14 +2665,19 @@ function save(){
   try {
     const e = {};
     for (const [k, m] of world.edits){ const o = {}; for (const [i, id] of m) o[i] = id; e[k] = o; }
+    const now = performance.now();
     localStorage.setItem(SAVE_KEY + ':' + SEED, JSON.stringify({
       edits:e, bag: bag.map(b => [b.id, b.n]), hp: player.hp, time: sky.time,
       pos: [player.x, player.y, player.z, player.yaw, player.pitch],
+      tiles: [...world.tiles],
+      crops: [...world.crops].map(([k, at]) => [k, Math.max(0, at - now)]),
+      fires: [...world.fires],
     }));
   } catch { /* 저장 공간이 없으면 조용히 넘어간다 */ }
 }
 function loadSave(){
   world.edits.clear(); world.lights.clear();
+  world.tiles.clear(); world.crops.clear(); world.fires.clear(); world.active.clear();
   bag.length = 0; saved = null;
   try {
     const raw = localStorage.getItem(SAVE_KEY + ':' + SEED);
@@ -2055,12 +2689,17 @@ function loadSave(){
       world.edits.set(k, m);
     }
     for (const [id, n] of o.bag || []) if (BLOCKS[id] || ITEMS[id]) bag.push({ id, n });
+    for (const [k, t] of o.tiles || []) world.tiles.set(k, t);
+    const now = performance.now();
+    for (const [k, left] of o.crops || []) world.crops.set(k, now + left);
+    for (const k of o.fires || []) world.fires.add(k);
     saved = o;
   } catch { world.edits.clear(); }
 }
 function resetWorld(){
   for (const c of world.chunks.values()){ if (c.mesh) destroy(c.mesh); if (c.wmesh) destroy(c.wmesh); }
   world.chunks.clear(); world._ck = null; world._c = null;
+  world.active.clear();
   mobs.length = 0; spawn = null;
   respawn();
   if (saved && saved.pos){
@@ -2086,6 +2725,7 @@ $('newworld').addEventListener('click', () => {
 });
 $('reset').addEventListener('click', () => {
   world.edits.clear(); world.lights.clear(); bag.length = 0;
+  world.tiles.clear(); world.crops.clear(); world.fires.clear();
   player.hp = MAX_HP; player.alive = true; sky.time = 0.06;
   saved = null; save();
   resetWorld();
@@ -2097,7 +2737,7 @@ elSeed.addEventListener('change', () => {
   if (!isNaN(v)){ setSeed(v); toast('씨앗 ' + SEED); }
 });
 
-/* ---------- 22. 청크 살림 ---------- */
+/* ---------- 23. 청크 살림 ---------- */
 let genBudget = 4, meshBudget = 4;
 function stream(){
   const pcx = Math.floor(player.x) >> 4, pcz = Math.floor(player.z) >> 4;
@@ -2143,7 +2783,7 @@ function stream(){
   }
 }
 
-/* ---------- 23. 그리기 ---------- */
+/* ---------- 24. 그리기 ---------- */
 let W = 0, H = 0, dpr = 1;
 function resize(){
   dpr = Math.min(window.devicePixelRatio || 1, 2);        // 또렷하게 그리고 화면 크기로 줄인다
@@ -2341,7 +2981,7 @@ function render(now){
   gl.bindVertexArray(null);
 }
 
-/* ---------- 24. 한 바퀴 ---------- */
+/* ---------- 25. 한 바퀴 ---------- */
 const hPos = $('hPos'), hFps = $('hFps'), hChunks = $('hChunks'), hTris = $('hTris'),
       hMobs = $('hMobs'), hMode = $('hMode');
 let last = performance.now(), fpsT = 0, fpsN = 0, hudT = 0, clockT = 0;
@@ -2358,6 +2998,7 @@ function loop(now){
     updateBreak(dt);
     updateMobs(dt);
     spawnTick(dt);
+    simTick(dt);
     if (mouseR){
       placeTimer -= dt;
       if (placeTimer <= 0){ placeTimer = 0.24; placeBlock(); }
@@ -2380,7 +3021,7 @@ function loop(now){
   if (fpsT > 0.5){ hFps.textContent = Math.round(fpsN / fpsT); fpsN = 0; fpsT = 0; }
 }
 
-/* ---------- 25. 첫걸음 ---------- */
+/* ---------- 26. 첫걸음 ---------- */
 (function boot(){
   const m = /seed=(\d+)/.exec(location.hash);
   SEED = m ? (+m[1] >>> 0) || 20260915 : 20260915;
@@ -2395,7 +3036,8 @@ function loop(now){
   refreshBar();
   drawClock();
   // 콘솔에서 들여다보라고 열어 둔다  MC.spawnMob('pig', MC.player.x, MC.player.y, MC.player.z - 3)
-  window.MC = { player, mobs, world, sky, bag, give, take, spawnMob, hurtPlayer, heal, MOBS, BLOCKS, ITEMS, RECIPES, toast };
+  window.MC = { player, mobs, world, sky, bag, give, take, spawnMob, hurtPlayer, heal,
+                MOBS, BLOCKS, ITEMS, RECIPES, SMELT, toast, villageAt, heightAt, VILL, raycast, placeBlock };
   requestAnimationFrame(loop);
 })();
 </script>
