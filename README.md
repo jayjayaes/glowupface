@@ -66,6 +66,11 @@
 인터넷에 올리려면 이 저장소의 Settings → Pages 에서
 Branch 를 `main`, 폴더를 `/ (root)` 로 두면 끝이다
 
+## 딸린 것
+
+`minecraft/` 에 웹 복셀 게임이 한 장 들어 있다 사이트와는 상관없는 딴짓이고
+역시 프레임워크도 빌드도 없다 [열어보기](./minecraft/index.html) · [설명](./minecraft/README.md)
+
 ---
 
 이 사이트의 배경 이미지는 AI로 만들었다 전자책 표지는 자기관리소가 직접 만든 것이다

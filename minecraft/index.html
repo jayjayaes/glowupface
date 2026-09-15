@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>마인크래프트 · 웹 복셀 게임</title>
+<meta name="description" content="프레임워크도 빌드도 없이 index.html 한 장으로 돌아가는 복셀 게임 지형을 만들고 블록을 부수고 놓는다">
+<meta name="theme-color" content="#0A0908">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%236B4A2B'/%3E%3Crect width='32' height='11' fill='%235BA33F'/%3E%3Crect y='11' width='32' height='3' fill='%233F7A2A'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all';this.onload=null"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css">
+
+<style>
+/* ============================================================
+   마인크래프트 · 웹 복셀 게임
+   의존성 0 빌드 0 이 파일 하나가 전부다
+   색은 자기관리소 사이트와 같은 금색 #D9B45C 를 쓴다
+   ============================================================ */
+:root{
+  --canvas:#0A0908;
+  --panel:rgba(14,12,10,.92);
+  --accent:#D9B45C;
+  --accent-soft:rgba(217,180,92,.22);
+  --line:rgba(217,180,92,.28);
+  --text:#F2ECE1;
+  --muted:#A79C8A;
+  --font:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--canvas);color:var(--text);font-family:var(--font);
+  -webkit-font-smoothing:antialiased;overscroll-behavior:none;touch-action:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+
+/* ---------- 조준선 ---------- */
+#cross{position:fixed;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none;
+  opacity:.85;mix-blend-mode:difference;z-index:5}
+#cross::before,#cross::after{content:"";position:absolute;background:#fff}
+#cross::before{left:10px;top:0;width:2px;height:22px}
+#cross::after{top:10px;left:0;height:2px;width:22px}
+
+/* ---------- 상단 정보 ---------- */
+#hud{position:fixed;top:0;left:0;padding:10px 14px;font-size:12px;line-height:1.7;letter-spacing:-.01em;
+  color:var(--muted);text-shadow:0 1px 3px rgba(0,0,0,.9);pointer-events:none;z-index:5;
+  font-variant-numeric:tabular-nums;padding-top:max(10px,env(safe-area-inset-top))}
+#hud b{color:var(--accent);font-weight:600}
+#hud .row{display:none}
+#hud.on .row{display:block}
+
+/* ---------- 손에 든 블록 ---------- */
+#hotbar{position:fixed;left:50%;transform:translateX(-50%);bottom:max(16px,env(safe-area-inset-bottom));
+  display:flex;gap:6px;padding:6px;border-radius:12px;background:var(--panel);
+  border:1px solid rgba(255,255,255,.08);box-shadow:0 10px 30px rgba(0,0,0,.55);z-index:6}
+.slot{position:relative;width:46px;height:46px;border-radius:8px;border:2px solid transparent;
+  background:rgba(255,255,255,.04);display:grid;place-items:center;cursor:pointer;transition:border-color .12s,transform .12s}
+.slot canvas{width:32px;height:32px;image-rendering:pixelated;border-radius:3px}
+.slot i{position:absolute;top:2px;left:5px;font-size:9px;font-style:normal;color:var(--muted)}
+.slot.sel{border-color:var(--accent);background:var(--accent-soft);transform:translateY(-3px)}
+#slotname{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(16px,env(safe-area-inset-bottom)) + 66px);
+  font-size:13px;color:var(--text);text-shadow:0 1px 4px #000;opacity:0;transition:opacity .35s;z-index:6;pointer-events:none}
+#slotname.on{opacity:1}
+
+/* ---------- 시작 · 일시정지 화면 ---------- */
+#menu{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;
+  background:radial-gradient(120% 90% at 50% 0%,rgba(20,17,13,.82),rgba(6,5,4,.95));
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+#menu.hide{display:none}
+.card{width:min(560px,100%);max-height:100%;overflow-y:auto;border:1px solid var(--line);border-radius:18px;
+  padding:28px;background:linear-gradient(180deg,rgba(27,23,18,.96),rgba(10,9,8,.96));
+  box-shadow:0 30px 80px rgba(0,0,0,.6);text-align:center}
+.card h1{font-size:26px;font-weight:800;letter-spacing:-.03em;margin-bottom:6px}
+.card h1 span{color:var(--accent)}
+.card p.sub{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:20px}
+.btn{display:inline-block;width:100%;padding:15px 20px;border:0;border-radius:12px;cursor:pointer;
+  background:var(--accent);color:#141109;font-family:var(--font);font-size:16px;font-weight:700;letter-spacing:-.02em;
+  transition:filter .15s,transform .1s}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,.12);font-size:13px;
+  font-weight:500;padding:11px 16px;width:auto;flex:1}
+.btnrow{display:flex;gap:8px;margin-top:10px}
+.keys{margin-top:22px;text-align:left;border-top:1px solid rgba(255,255,255,.08);padding-top:18px;
+  display:grid;grid-template-columns:auto 1fr;gap:9px 14px;font-size:13px;align-items:center}
+.keys kbd{justify-self:start;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.12);border-bottom-width:2px;font-family:var(--font);font-size:12px;
+  font-weight:600;color:var(--accent);white-space:nowrap}
+.keys span{color:var(--muted)}
+.seedrow{display:flex;gap:8px;margin-top:14px;align-items:center}
+.seedrow label{font-size:12px;color:var(--muted);white-space:nowrap}
+.seedrow input{flex:1;min-width:0;padding:10px 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(0,0,0,.35);color:var(--text);font-family:var(--font);font-size:13px}
+.seedrow input:focus{outline:1px solid var(--accent)}
+.note{margin-top:16px;font-size:11px;color:#6E6559;line-height:1.7}
+
+/* ---------- 터치 조작 ---------- */
+#touch{position:fixed;inset:0;z-index:7;display:none;pointer-events:none}
+#touch.on{display:block}
+#stick{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:calc(max(16px,env(safe-area-inset-bottom)) + 76px);
+  width:124px;height:124px;border-radius:50%;border:1px solid rgba(255,255,255,.14);
+  background:rgba(10,9,8,.42);pointer-events:auto}
+#knob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;
+  background:var(--accent-soft);border:1px solid var(--line)}
+.tbtn{position:absolute;right:max(18px,env(safe-area-inset-right));width:74px;height:74px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.14);background:rgba(10,9,8,.5);color:var(--text);pointer-events:auto;
+  font-family:var(--font);font-size:12px;font-weight:600;letter-spacing:-.02em}
+.tbtn:active{background:var(--accent-soft);border-color:var(--accent)}
+#bJump{bottom:calc(max(16px,env(safe-area-inset-bottom)) + 170px)}
+#bPlace{bottom:calc(max(16px,env(safe-area-inset-bottom)) + 88px)}
+#bBreak{bottom:calc(max(16px,env(safe-area-inset-bottom)) + 88px);right:auto;left:calc(max(18px,env(safe-area-inset-left)) + 138px)}
+
+#toast{position:fixed;left:50%;top:14%;transform:translateX(-50%);z-index:9;padding:10px 16px;border-radius:10px;
+  background:var(--panel);border:1px solid var(--line);font-size:13px;color:var(--text);opacity:0;
+  transition:opacity .3s;pointer-events:none;white-space:nowrap}
+#toast.on{opacity:1}
+@media (max-width:420px){ .slot{width:38px;height:38px} .slot canvas{width:26px;height:26px} .card{padding:22px} }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="cross"></div>
+
+<div id="hud">
+  <div class="row">좌표 <b id="hPos">0 0 0</b></div>
+  <div class="row"><b id="hFps">0</b> fps · 청크 <b id="hChunks">0</b> · 면 <b id="hTris">0</b></div>
+  <div class="row" id="hMode">걷기</div>
+</div>
+
+<div id="slotname"></div>
+<div id="hotbar"></div>
+
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <button class="tbtn" id="bJump">점프</button>
+  <button class="tbtn" id="bPlace">놓기</button>
+  <button class="tbtn" id="bBreak">부수기</button>
+</div>
+
+<div id="toast"></div>
+
+<div id="menu">
+  <div class="card">
+    <h1>마인<span>크래프트</span></h1>
+    <p class="sub">빌드도 프레임워크도 없다 이 파일 한 장이 전부다<br>지형은 씨앗에서 자라고 부순 자리는 브라우저에 남는다</p>
+    <button class="btn" id="play">시작하기</button>
+    <div class="btnrow">
+      <button class="btn ghost" id="newworld">새 월드</button>
+      <button class="btn ghost" id="reset">부순 자리 되돌리기</button>
+      <button class="btn ghost" id="toggleHud">정보 표시</button>
+    </div>
+    <div class="seedrow">
+      <label for="seed">씨앗</label>
+      <input id="seed" inputmode="numeric" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="keys">
+      <kbd>W A S D</kbd><span>걷기</span>
+      <kbd>마우스</kbd><span>둘러보기</span>
+      <kbd>Space</kbd><span>점프 · 두 번 누르면 날기</span>
+      <kbd>Shift</kbd><span>달리기 · 날 때는 내려가기</span>
+      <kbd>왼쪽 클릭</kbd><span>블록 부수기</span>
+      <kbd>오른쪽 클릭</kbd><span>블록 놓기</span>
+      <kbd>1 ~ 9 · 휠</kbd><span>손에 든 블록 고르기</span>
+      <kbd>가운데 클릭</kbd><span>보고 있는 블록 집기</span>
+      <kbd>F</kbd><span>날기 켜고 끄기</span>
+      <kbd>F3</kbd><span>좌표와 성능 보기</span>
+      <kbd>Esc</kbd><span>잠깐 멈추기</span>
+    </div>
+    <p class="note">모장의 마인크래프트를 향한 오마주다 공식 제품이 아니고 관련도 없다</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   0. 한눈에 보는 구조
+   ------------------------------------------------------------
+   잡음 → 지형     : 값잡음 fBm 으로 높이와 동굴을 만든다
+   청크            : 16 x 64 x 16 한 덩어리 Uint8Array 한 장
+   메시            : 보이는 면만 골라 정점으로 굽는다 (AO 포함)
+   그리기          : WebGL2 · 텍스처 배열 · 청크마다 한 번
+   조작            : 포인터 잠금 + 터치 조이스틱
+   ============================================================ */
+
+/* ---------- 1. 상수 ---------- */
+const CX = 16, CZ = 16, CH = 64;      // 청크 한 덩어리 크기
+const SEA = 26;                        // 바다 높이
+const RENDER = 7;                      // 그리는 청크 반경
+const REACH = 5.5;                     // 팔이 닿는 거리
+const GRAV = 30, JUMP = 8.6;
+const WALK = 4.6, RUN = 7.4, FLY = 12;
+const PW = 0.3, PH = 1.8, EYE = 1.62;  // 몸 반지름 · 키 · 눈높이
+const SAVE_KEY = 'minecraft.web.edits.v1';
+
+/* ---------- 2. 블록 ---------- */
+// L: 텍스처 층 번호 [윗면, 옆면, 아랫면]
+const T = { GRASS_TOP:0, GRASS_SIDE:1, DIRT:2, STONE:3, SAND:4, LOG_SIDE:5, LOG_TOP:6,
+            LEAVES:7, PLANK:8, WATER:9, BEDROCK:10, COBBLE:11, BRICK:12, GLASS:13, SNOW:14, GRAVEL:15 };
+
+const AIR = 0;
+const BLOCKS = [
+  null,                                                                        // 0 공기
+  { id:1,  name:'잔디',       L:[T.GRASS_TOP,T.GRASS_SIDE,T.DIRT] },
+  { id:2,  name:'흙',         L:[T.DIRT,T.DIRT,T.DIRT] },
+  { id:3,  name:'돌',         L:[T.STONE,T.STONE,T.STONE] },
+  { id:4,  name:'조약돌',     L:[T.COBBLE,T.COBBLE,T.COBBLE] },
+  { id:5,  name:'모래',       L:[T.SAND,T.SAND,T.SAND] },
+  { id:6,  name:'통나무',     L:[T.LOG_TOP,T.LOG_SIDE,T.LOG_TOP] },
+  { id:7,  name:'나뭇잎',     L:[T.LEAVES,T.LEAVES,T.LEAVES], see:true },      // see: 속이 비쳐 같은 블록끼리 면을 지운다
+  { id:8,  name:'나무판자',   L:[T.PLANK,T.PLANK,T.PLANK] },
+  { id:9,  name:'물',         L:[T.WATER,T.WATER,T.WATER], see:true, fluid:true },
+  { id:10, name:'기반암',     L:[T.BEDROCK,T.BEDROCK,T.BEDROCK], hard:true },
+  { id:11, name:'유리',       L:[T.GLASS,T.GLASS,T.GLASS], see:true },
+  { id:12, name:'벽돌',       L:[T.BRICK,T.BRICK,T.BRICK] },
+  { id:13, name:'눈',         L:[T.SNOW,T.SNOW,T.DIRT] },
+  { id:14, name:'자갈',       L:[T.GRAVEL,T.GRAVEL,T.GRAVEL] },
+];
+const WATER = 9;
+const isSolid = id => id !== AIR && !BLOCKS[id].fluid;                 // 몸이 부딪히는가
+const isOpaque = id => id !== AIR && !BLOCKS[id].see;                  // 뒤가 안 보이는가
+const HOTBAR = [1,2,3,4,5,8,6,7,11];                                   // 손에 드는 아홉 칸
+
+/* ---------- 3. 잡음 ---------- */
+function hash2(x, z, s){
+  let n = Math.imul(x|0, 374761393) + Math.imul(z|0, 668265263) + Math.imul(s|0, 1442695041);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+function hash3(x, y, z, s){
+  let n = Math.imul(x|0, 374761393) + Math.imul(y|0, 1103515245) + Math.imul(z|0, 668265263) + Math.imul(s|0, 1442695041);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+const smooth = t => t * t * (3 - 2 * t);
+function noise2(x, z, s){
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const tx = smooth(x - xi), tz = smooth(z - zi);
+  const a = hash2(xi, zi, s),     b = hash2(xi + 1, zi, s);
+  const c = hash2(xi, zi + 1, s), d = hash2(xi + 1, zi + 1, s);
+  return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz;
+}
+function noise3(x, y, z, s){
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const tx = smooth(x - xi), ty = smooth(y - yi), tz = smooth(z - zi);
+  const l = (a, b, t) => a + (b - a) * t;
+  const c00 = l(hash3(xi,yi,zi,s),     hash3(xi+1,yi,zi,s),     tx);
+  const c10 = l(hash3(xi,yi+1,zi,s),   hash3(xi+1,yi+1,zi,s),   tx);
+  const c01 = l(hash3(xi,yi,zi+1,s),   hash3(xi+1,yi,zi+1,s),   tx);
+  const c11 = l(hash3(xi,yi+1,zi+1,s), hash3(xi+1,yi+1,zi+1,s), tx);
+  return l(l(c00, c10, ty), l(c01, c11, ty), tz);
+}
+function fbm2(x, z, s, oct){
+  let v = 0, amp = 0.5, f = 1, norm = 0;
+  for (let i = 0; i < oct; i++){ v += noise2(x * f, z * f, s + i * 91) * amp; norm += amp; amp *= 0.5; f *= 2; }
+  return v / norm;
+}
+
+/* ---------- 4. 지형 규칙 ---------- */
+let SEED = 20260915;
+function heightAt(wx, wz){
+  const cont  = fbm2(wx * 0.0060, wz * 0.0060, SEED, 4);        // 큰 들과 산
+  const hill  = fbm2(wx * 0.0220, wz * 0.0220, SEED + 17, 3);   // 잔 언덕
+  const ridge = Math.abs(fbm2(wx * 0.0090, wz * 0.0090, SEED + 31, 2) - 0.5) * 2;
+  let h = SEA + 1 + (cont - 0.42) * 46 + (hill - 0.5) * 9;
+  if (cont > 0.62) h += (1 - ridge) * (cont - 0.62) * 90;       // 높은 곳만 산등성이를 세운다
+  return Math.max(3, Math.min(CH - 6, Math.round(h)));
+}
+function isCave(wx, wy, wz){
+  if (wy < 2) return false;
+  const n = noise3(wx * 0.055, wy * 0.085, wz * 0.055, SEED + 77) * 0.65
+          + noise3(wx * 0.021, wy * 0.031, wz * 0.021, SEED + 78) * 0.35;
+  return n > 0.635;
+}
+// 나무는 청크 경계를 넘나든다 그래서 좌표만으로 결정한다
+function treeAt(wx, wz){
+  const h = heightAt(wx, wz);
+  if (h <= SEA + 1 || h > CH - 14) return 0;
+  if (hash2(wx, wz, SEED + 5) > 0.018) return 0;
+  if (fbm2(wx * 0.013, wz * 0.013, SEED + 44, 2) < 0.42) return 0;   // 숲이 몰려 자라도록
+  return 4 + Math.floor(hash2(wx, wz, SEED + 6) * 3);                 // 줄기 높이
+}
+
+/* ---------- 5. 텍스처 (16x16 을 코드로 그린다) ---------- */
+const TILE = 16, LAYERS = 16;
+function tile(fn){
+  const px = new Uint8Array(TILE * TILE * 4);
+  for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++){
+    const c = fn(x, y, hash2(x, y, 7)), i = (y * TILE + x) * 4;
+    px[i] = c[0]; px[i+1] = c[1]; px[i+2] = c[2]; px[i+3] = c.length > 3 ? c[3] : 255;
+  }
+  return px;
+}
+const jit = (base, n, amt) => [
+  Math.max(0, Math.min(255, base[0] + (n - 0.5) * amt)),
+  Math.max(0, Math.min(255, base[1] + (n - 0.5) * amt)),
+  Math.max(0, Math.min(255, base[2] + (n - 0.5) * amt))];
+
+function buildTiles(){
+  const t = [];
+  t[T.GRASS_TOP] = tile((x,y,n) => jit([104,170,74], n, 34));
+  t[T.DIRT]      = tile((x,y,n) => jit([124,88,58], n, 36));
+  t[T.GRASS_SIDE]= tile((x,y,n) => {
+    const edge = 3 + Math.floor(hash2(x, 0, 3) * 2.6);              // 흙 위로 흘러내린 잔디 자락
+    return y < edge ? jit([104,170,74], n, 34) : jit([124,88,58], n, 36);
+  });
+  t[T.STONE]     = tile((x,y,n) => jit([129,129,129], n, 26));
+  t[T.COBBLE]    = tile((x,y,n) => {
+    const c = hash2(Math.floor(x/4), Math.floor(y/4), 11);
+    const g = (x % 4 === 0 || y % 4 === 0) ? -26 : 0;
+    return jit([118 + c*34 + g, 118 + c*34 + g, 118 + c*34 + g], n, 22);
+  });
+  t[T.SAND]      = tile((x,y,n) => jit([219,203,142], n, 24));
+  t[T.GRAVEL]    = tile((x,y,n) => jit([136,128,122], n, 52));
+  t[T.LOG_SIDE]  = tile((x,y,n) => {
+    const bark = Math.sin(x * 1.9) * 0.5 + 0.5;
+    return jit([104 + bark*18, 76 + bark*14, 44 + bark*10], n, 22);
+  });
+  t[T.LOG_TOP]   = tile((x,y,n) => {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    const ring = Math.sin(d * 2.4) * 0.5 + 0.5;
+    return d > 7.2 ? jit([104,76,44], n, 18) : jit([166 - ring*30, 134 - ring*26, 88 - ring*18], n, 16);
+  });
+  t[T.LEAVES]    = tile((x,y,n) => n > 0.86 ? jit([54,104,40], n, 20) : jit([62,124,46], n, 46));
+  t[T.PLANK]     = tile((x,y,n) => {
+    const line = (y % 5 === 4) ? -34 : 0, grain = Math.sin(x * 3.1 + Math.floor(y/5) * 2) * 6;
+    return jit([172 + line + grain, 136 + line + grain, 86 + line + grain], n, 16);
+  });
+  t[T.BRICK]     = tile((x,y,n) => {
+    const row = Math.floor(y / 4), off = (row % 2) * 4;
+    const mortar = (y % 4 === 3) || ((x + off) % 8 === 7);
+    return mortar ? jit([178,172,166], n, 12) : jit([150,74,58], n, 24);
+  });
+  t[T.SNOW]      = tile((x,y,n) => jit([238,241,247], n, 16));
+  t[T.BEDROCK]   = tile((x,y,n) => jit([70,70,74], n, 74));
+  t[T.WATER]     = tile((x,y,n) => {
+    const w = Math.sin(x * 0.8 + y * 0.6) * 8;
+    return [48 + w, 104 + w, 196 + w, 190];
+  });
+  t[T.GLASS]     = tile((x,y,n) => {
+    const frame = x === 0 || y === 0 || x === 15 || y === 15;
+    const shine = (x + y === 5 || x + y === 6);
+    if (frame) return [204,226,236,235];
+    if (shine)  return [236,248,252,120];
+    return [180,210,224, 26];                                        // 알파가 낮으면 셰이더가 버린다
+  });
+  return t;
+}
+
+/* ---------- 6. 청크 ---------- */
+const IDX = (x, y, z) => (y * CZ + z) * CX + x;
+const key = (cx, cz) => cx + ',' + cz;
+
+class Chunk {
+  constructor(cx, cz){
+    this.cx = cx; this.cz = cz;
+    this.b = new Uint8Array(CX * CH * CZ);
+    this.h = new Uint8Array(CX * CZ);      // 하늘이 닿는 가장 높은 칸
+    this.gen = false; this.dirty = true;
+    this.mesh = null; this.wmesh = null;   // 구운 결과 (불투명 · 물)
+  }
+  get(x, y, z){ return this.b[IDX(x, y, z)]; }
+  set(x, y, z, id){ this.b[IDX(x, y, z)] = id; }
+  recalcHeight(x, z){
+    let y = CH - 1;
+    while (y > 0 && !isOpaque(this.b[IDX(x, y, z)])) y--;
+    this.h[z * CX + x] = y;
+  }
+}
+
+/* ---------- 7. 월드 ---------- */
+const world = {
+  chunks: new Map(),
+  edits: new Map(),        // "cx,cz" → Map(로컬번호 → 블록)
+  _ck: null, _c: null,
+
+  chunk(cx, cz){
+    const k = key(cx, cz);
+    if (this._ck === k) return this._c;
+    const c = this.chunks.get(k) || null;
+    this._ck = k; this._c = c;
+    return c;
+  },
+  getBlock(x, y, z){
+    if (y < 0) return 3;                                  // 바닥 아래는 돌로 친다 면을 굽지 않으려고
+    if (y >= CH) return AIR;
+    const c = this.chunk(x >> 4, z >> 4);
+    if (!c || !c.gen) return AIR;
+    return c.b[IDX(x & 15, y, z & 15)];
+  },
+  heightAtW(x, z){
+    const c = this.chunk(x >> 4, z >> 4);
+    return (c && c.gen) ? c.h[(z & 15) * CX + (x & 15)] : 0;
+  },
+  setBlock(x, y, z, id, record){
+    if (y < 1 || y >= CH) return false;
+    const cx = x >> 4, cz = z >> 4;
+    const c = this.chunk(cx, cz);
+    if (!c || !c.gen) return false;
+    const lx = x & 15, lz = z & 15;
+    c.set(lx, y, lz, id);
+    c.recalcHeight(lx, lz);
+    c.dirty = true;
+    if (record){
+      const k = key(cx, cz);
+      let m = this.edits.get(k);
+      if (!m){ m = new Map(); this.edits.set(k, m); }
+      m.set(IDX(lx, y, lz), id);
+      saveSoon();
+    }
+    // 경계에 붙은 블록이면 옆 청크도 다시 굽는다
+    const touch = (dx, dz) => { const n = this.chunks.get(key(cx + dx, cz + dz)); if (n) n.dirty = true; };
+    if (lx === 0) touch(-1, 0); if (lx === 15) touch(1, 0);
+    if (lz === 0) touch(0, -1); if (lz === 15) touch(0, 1);
+    return true;
+  },
+
+  generate(c){
+    const b = c.b, ox = c.cx * CX, oz = c.cz * CZ;
+    for (let z = 0; z < CZ; z++) for (let x = 0; x < CX; x++){
+      const wx = ox + x, wz = oz + z;
+      const h = heightAt(wx, wz);
+      const temp = fbm2(wx * 0.0042, wz * 0.0042, SEED + 99, 2);
+      const beach = h <= SEA + 1;
+      const snowy = h > 46 || (h > 40 && temp < 0.40);
+      const top  = beach ? 5 : snowy ? 13 : 1;
+      const soil = beach ? 5 : 2;
+      for (let y = 0; y <= h; y++){
+        b[IDX(x, y, z)] = y === 0 ? 10 : y === h ? top : y > h - 4 ? soil : 3;
+      }
+      // 물을 붓는다
+      for (let y = h + 1; y <= SEA; y++) b[IDX(x, y, z)] = WATER;
+      // 동굴을 판다 물 밑은 뚫지 않는다
+      const carveTop = h > SEA + 4 ? h : Math.min(h, SEA - 5);
+      for (let y = 1; y < carveTop; y++){
+        if (b[IDX(x, y, z)] === 3 || b[IDX(x, y, z)] === 2){
+          if (isCave(wx, y, wz)) b[IDX(x, y, z)] = AIR;
+        }
+      }
+    }
+    // 나무 청크 밖에서 시작한 나무도 가지를 걸친다
+    for (let dz = -3; dz < CZ + 3; dz++) for (let dx = -3; dx < CX + 3; dx++){
+      const wx = ox + dx, wz = oz + dz;
+      const trunk = treeAt(wx, wz);
+      if (!trunk) continue;
+      const base = heightAt(wx, wz) + 1;
+      const put = (x, y, z, id, soft) => {
+        if (x < 0 || x >= CX || z < 0 || z >= CZ || y < 0 || y >= CH) return;
+        const i = IDX(x, y, z);
+        if (soft && b[i] !== AIR) return;
+        b[i] = id;
+      };
+      for (let i = 0; i < trunk; i++) put(dx, base + i, dz, 6, false);
+      const ct = base + trunk;
+      for (let ly = -2; ly <= 1; ly++) {
+        const r = ly <= -1 ? 2 : 1;
+        for (let lz = -r; lz <= r; lz++) for (let lx = -r; lx <= r; lx++){
+          if (Math.abs(lx) === r && Math.abs(lz) === r && (ly > -1 || hash2(wx + lx, wz + lz, 3) > 0.5)) continue;
+          put(dx + lx, ct + ly, dz + lz, 7, true);
+        }
+      }
+      put(dx, ct + 1, dz, 7, true);
+    }
+    // 사람이 손댄 자리를 되살린다
+    const m = this.edits.get(key(c.cx, c.cz));
+    if (m) for (const [i, id] of m) b[i] = id;
+
+    c.gen = true; c.dirty = true;
+    for (let z = 0; z < CZ; z++) for (let x = 0; x < CX; x++) c.recalcHeight(x, z);
+    // 새 이웃이 생겼으니 옆 청크의 경계면을 다시 굽는다
+    for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const n = this.chunks.get(key(c.cx + dx, c.cz + dz));
+      if (n && n.gen) n.dirty = true;
+    }
+  },
+};
+
+/* ---------- 8. 면 굽기 ---------- */
+// 각 면: 법선 · 네 꼭짓점 · uv · AO 를 볼 두 축
+const FACES = [
+  { n:[0,1,0],  v:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]], uv:[[0,0],[0,1],[1,1],[1,0]], ax:[0,2], shade:1.00, tex:0 },
+  { n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]], uv:[[0,0],[1,0],[1,1],[0,1]], ax:[0,2], shade:0.50, tex:2 },
+  { n:[1,0,0],  v:[[1,0,1],[1,0,0],[1,1,0],[1,1,1]], uv:[[0,1],[1,1],[1,0],[0,0]], ax:[1,2], shade:0.78, tex:1 },
+  { n:[-1,0,0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]], uv:[[0,1],[1,1],[1,0],[0,0]], ax:[1,2], shade:0.78, tex:1 },
+  { n:[0,0,1],  v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]], uv:[[0,1],[1,1],[1,0],[0,0]], ax:[0,1], shade:0.64, tex:1 },
+  { n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]], uv:[[0,1],[1,1],[1,0],[0,0]], ax:[0,1], shade:0.64, tex:1 },
+];
+const AO_LEVEL = [0.42, 0.62, 0.81, 1.0];
+
+class Buf {
+  constructor(){ this.v = new Float32Array(1 << 16); this.i = new Uint32Array(1 << 15); this.nv = 0; this.ni = 0; }
+  reset(){ this.nv = 0; this.ni = 0; }
+  room(nv, ni){
+    if (this.nv + nv * 7 > this.v.length){
+      const g = new Float32Array(Math.max(this.v.length * 2, this.nv + nv * 7)); g.set(this.v.subarray(0, this.nv)); this.v = g;
+    }
+    if (this.ni + ni > this.i.length){
+      const g = new Uint32Array(Math.max(this.i.length * 2, this.ni + ni)); g.set(this.i.subarray(0, this.ni)); this.i = g;
+    }
+  }
+  push(x, y, z, u, w, layer, shade){
+    const v = this.v, n = this.nv;
+    v[n] = x; v[n+1] = y; v[n+2] = z; v[n+3] = u; v[n+4] = w; v[n+5] = layer; v[n+6] = shade;
+    this.nv = n + 7;
+  }
+}
+const bufO = new Buf(), bufW = new Buf();
+
+// 이웃 한 겹까지 담은 18 x 66 x 18 복사본 — 안쪽 반복문에서 청크를 다시 찾지 않으려고
+const PX = CX + 2, PY = CH + 2, PZ = CZ + 2;
+const pad = new Uint8Array(PX * PY * PZ);
+const padH = new Int16Array(PX * PZ);
+const PI = (x, y, z) => ((y + 1) * PZ + (z + 1)) * PX + (x + 1);
+
+function fillPad(c){
+  const ox = c.cx * CX, oz = c.cz * CZ;
+  pad.fill(0);
+  for (let y = 0; y < CH; y++) for (let z = 0; z < CZ; z++){
+    const src = (y * CZ + z) * CX, dst = ((y + 1) * PZ + (z + 1)) * PX + 1;
+    pad.set(c.b.subarray(src, src + CX), dst);
+  }
+  for (let y = -1; y <= CH; y++){
+    for (let z = -1; z <= CZ; z++) for (let x = -1; x <= CX; x++){
+      if (x >= 0 && x < CX && z >= 0 && z < CZ && y >= 0 && y < CH) continue;
+      pad[PI(x, y, z)] = world.getBlock(ox + x, y, oz + z);
+    }
+  }
+  for (let z = -1; z <= CZ; z++) for (let x = -1; x <= CX; x++){
+    padH[(z + 1) * PX + (x + 1)] = (x >= 0 && x < CX && z >= 0 && z < CZ)
+      ? c.h[z * CX + x] : world.heightAtW(ox + x, oz + z);
+  }
+}
+
+function buildMesh(c){
+  fillPad(c);
+  bufO.reset(); bufW.reset();
+  for (let y = 0; y < CH; y++) for (let z = 0; z < CZ; z++) for (let x = 0; x < CX; x++){
+    const id = pad[PI(x, y, z)];
+    if (id === AIR) continue;
+    const def = BLOCKS[id], water = id === WATER;
+    const buf = water ? bufW : bufO;
+    for (let f = 0; f < 6; f++){
+      const F = FACES[f], nx = x + F.n[0], ny = y + F.n[1], nz = z + F.n[2];
+      const nb = pad[PI(nx, ny, nz)];
+      if (nb !== AIR){
+        if (isOpaque(nb) || nb === id) continue;         // 막혔거나 같은 투명 블록이면 굽지 않는다
+        if (water) continue;                              // 물은 유리·잎 뒤까지 그리지 않는다
+      }
+      const sky = ny > padH[(nz + 1) * PX + (nx + 1)] ? 1.0 : 0.60;
+      const layer = def.L[F.tex];
+      const base = F.shade * sky;
+      const a0 = F.ax[0], a1 = F.ax[1];
+      const ao = [0, 0, 0, 0];
+      for (let k = 0; k < 4; k++){
+        const cv = F.v[k];
+        const s0 = cv[a0] * 2 - 1, s1 = cv[a1] * 2 - 1;
+        const p1 = [nx, ny, nz], p2 = [nx, ny, nz], p3 = [nx, ny, nz];
+        p1[a0] += s0;  p2[a1] += s1;  p3[a0] += s0; p3[a1] += s1;
+        const o1 = isOpaque(pad[PI(p1[0], p1[1], p1[2])]) ? 1 : 0;
+        const o2 = isOpaque(pad[PI(p2[0], p2[1], p2[2])]) ? 1 : 0;
+        const o3 = isOpaque(pad[PI(p3[0], p3[1], p3[2])]) ? 1 : 0;
+        ao[k] = (o1 && o2) ? 0 : 3 - (o1 + o2 + o3);
+      }
+      buf.room(4, 6);
+      const v0 = buf.nv / 7;
+      for (let k = 0; k < 4; k++){
+        const cv = F.v[k], uv = F.uv[k];
+        buf.push(x + cv[0], y + cv[1], z + cv[2], uv[0], uv[1], layer, base * AO_LEVEL[ao[k]]);
+      }
+      const I = buf.i;
+      // 어두운 구석이 마주 보면 삼각형을 돌려 이음매를 감춘다
+      if (ao[0] + ao[2] > ao[1] + ao[3]){
+        I[buf.ni++] = v0;   I[buf.ni++] = v0+1; I[buf.ni++] = v0+2;
+        I[buf.ni++] = v0;   I[buf.ni++] = v0+2; I[buf.ni++] = v0+3;
+      } else {
+        I[buf.ni++] = v0+1; I[buf.ni++] = v0+2; I[buf.ni++] = v0+3;
+        I[buf.ni++] = v0+1; I[buf.ni++] = v0+3; I[buf.ni++] = v0;
+      }
+    }
+  }
+}
+
+/* ---------- 9. 작은 행렬 도구 ---------- */
+function perspective(out, fovy, aspect, near, far){
+  const f = 1 / Math.tan(fovy / 2);
+  out.fill(0);
+  out[0] = f / aspect; out[5] = f;
+  out[10] = (far + near) / (near - far); out[11] = -1;
+  out[14] = 2 * far * near / (near - far);
+  return out;
+}
+function lookDir(out, px, py, pz, fx, fy, fz){
+  // 오른쪽 = 앞 x 위(0,1,0)  ·  위 = 오른쪽 x 앞
+  let rx = -fz, rz = fx;
+  const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
+  const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+  out[0] = rx;  out[4] = 0;   out[8]  = rz;
+  out[1] = ux;  out[5] = uy;  out[9]  = uz;
+  out[2] = -fx; out[6] = -fy; out[10] = -fz;
+  out[3] = 0; out[7] = 0; out[11] = 0; out[15] = 1;
+  out[12] = -(out[0] * px + out[4] * py + out[8]  * pz);
+  out[13] = -(out[1] * px + out[5] * py + out[9]  * pz);
+  out[14] = -(out[2] * px + out[6] * py + out[10] * pz);
+  return out;
+}
+function mul(out, a, b){                                 // out = a * b (열 우선)
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++){
+    out[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  }
+  return out;
+}
+const matP = new Float32Array(16), matV = new Float32Array(16), matVP = new Float32Array(16);
+const planes = new Float32Array(24);
+function frustum(m){
+  const row = (i) => [m[i], m[4 + i], m[8 + i], m[12 + i]];
+  const r0 = row(0), r1 = row(1), r2 = row(2), r3 = row(3);
+  const set = (i, a, b, s) => {
+    let x = a[0] + s * b[0], y = a[1] + s * b[1], z = a[2] + s * b[2], w = a[3] + s * b[3];
+    const l = Math.hypot(x, y, z) || 1;
+    planes[i*4] = x/l; planes[i*4+1] = y/l; planes[i*4+2] = z/l; planes[i*4+3] = w/l;
+  };
+  set(0, r3, r0, 1); set(1, r3, r0, -1);
+  set(2, r3, r1, 1); set(3, r3, r1, -1);
+  set(4, r3, r2, 1); set(5, r3, r2, -1);
+}
+function boxVisible(x0, y0, z0, x1, y1, z1){
+  for (let i = 0; i < 6; i++){
+    const a = planes[i*4], b = planes[i*4+1], c = planes[i*4+2], d = planes[i*4+3];
+    const px = a > 0 ? x1 : x0, py = b > 0 ? y1 : y0, pz = c > 0 ? z1 : z0;
+    if (a * px + b * py + c * pz + d < 0) return false;
+  }
+  return true;
+}
+
+/* ---------- 10. WebGL ---------- */
+const cv = document.getElementById('gl');
+const gl = cv.getContext('webgl2', { antialias:true, alpha:false, powerPreference:'high-performance' });
+if (!gl){
+  document.getElementById('menu').innerHTML =
+    '<div class="card"><h1>WebGL2 가 없다</h1><p class="sub">이 게임은 WebGL2 로 그린다 최신 브라우저에서 열어달라</p></div>';
+  throw new Error('no webgl2');
+}
+function shader(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+const progBlock = program(`#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec2 aUV;
+layout(location=2) in float aLayer;
+layout(location=3) in float aShade;
+uniform mat4 uVP; uniform vec3 uOrigin; uniform vec3 uCam;
+uniform float uFogNear; uniform float uFogFar; uniform float uTime; uniform float uWave;
+out vec2 vUV; out float vLayer; out float vShade; out float vFog;
+void main(){
+  vec3 p = aPos + uOrigin;
+  if (uWave > 0.5) p.y -= 0.11 + 0.035 * sin(uTime * 1.7 + (p.x + p.z) * 0.6);
+  float d = distance(p, uCam);
+  vFog = clamp((d - uFogNear) / max(uFogFar - uFogNear, 0.001), 0.0, 1.0);
+  vUV = aUV; vLayer = aLayer; vShade = aShade;
+  gl_Position = uVP * vec4(p, 1.0);
+}`, `#version 300 es
+precision highp float; precision highp sampler2DArray;
+in vec2 vUV; in float vLayer; in float vShade; in float vFog;
+uniform sampler2DArray uTex; uniform vec3 uFogColor;
+out vec4 outColor;
+void main(){
+  vec4 c = texture(uTex, vec3(vUV, vLayer));
+  if (c.a < 0.35) discard;
+  vec3 rgb = mix(c.rgb * vShade, uFogColor, vFog);
+  outColor = vec4(rgb, c.a);
+}`);
+
+const progLine = program(`#version 300 es
+layout(location=0) in vec3 aPos;
+uniform mat4 uVP; uniform vec3 uOrigin;
+void main(){ gl_Position = uVP * vec4(aPos * 1.004 - 0.002 + uOrigin, 1.0); }`,
+`#version 300 es
+precision highp float;
+out vec4 outColor;
+void main(){ outColor = vec4(0.05, 0.04, 0.03, 0.55); }`);
+
+const U = {
+  vp: gl.getUniformLocation(progBlock, 'uVP'),
+  origin: gl.getUniformLocation(progBlock, 'uOrigin'),
+  cam: gl.getUniformLocation(progBlock, 'uCam'),
+  fogNear: gl.getUniformLocation(progBlock, 'uFogNear'),
+  fogFar: gl.getUniformLocation(progBlock, 'uFogFar'),
+  fogColor: gl.getUniformLocation(progBlock, 'uFogColor'),
+  tex: gl.getUniformLocation(progBlock, 'uTex'),
+  time: gl.getUniformLocation(progBlock, 'uTime'),
+  wave: gl.getUniformLocation(progBlock, 'uWave'),
+};
+const UL = { vp: gl.getUniformLocation(progLine, 'uVP'), origin: gl.getUniformLocation(progLine, 'uOrigin') };
+
+// 텍스처 배열 층마다 16x16 한 장
+const tex = gl.createTexture();
+const tiles = buildTiles();
+gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 5, gl.RGBA8, TILE, TILE, LAYERS);
+for (let i = 0; i < LAYERS; i++){
+  const px = tiles[i] || tiles[T.STONE];
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, TILE, TILE, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+}
+gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+if (aniso) gl.texParameterf(gl.TEXTURE_2D_ARRAY, aniso.TEXTURE_MAX_ANISOTROPY_EXT,
+  Math.min(4, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+
+// 보고 있는 블록에 두르는 테두리
+const lineVao = gl.createVertexArray();
+{
+  const e = [[0,0,0],[1,0,0],[1,0,0],[1,0,1],[1,0,1],[0,0,1],[0,0,1],[0,0,0],
+             [0,1,0],[1,1,0],[1,1,0],[1,1,1],[1,1,1],[0,1,1],[0,1,1],[0,1,0],
+             [0,0,0],[0,1,0],[1,0,0],[1,1,0],[1,0,1],[1,1,1],[0,0,1],[0,1,1]];
+  gl.bindVertexArray(lineVao);
+  const vb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(e.flat()), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+  gl.bindVertexArray(null);
+}
+
+const STRIDE = 7 * 4;
+function upload(mesh, buf){
+  if (buf.ni === 0){ if (mesh) destroy(mesh); return null; }
+  let m = mesh;
+  if (!m){
+    m = { vao: gl.createVertexArray(), vb: gl.createBuffer(), ib: gl.createBuffer(), count: 0 };
+    gl.bindVertexArray(m.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, STRIDE, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, STRIDE, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, STRIDE, 20);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, STRIDE, 24);
+    gl.bindVertexArray(null);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+  gl.bufferData(gl.ARRAY_BUFFER, buf.v.subarray(0, buf.nv), gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, buf.i.subarray(0, buf.ni), gl.DYNAMIC_DRAW);
+  m.count = buf.ni;
+  return m;
+}
+function destroy(m){ gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); }
+function remesh(c){
+  buildMesh(c);
+  c.mesh = upload(c.mesh, bufO);
+  c.wmesh = upload(c.wmesh, bufW);
+  c.dirty = false;
+}
+
+/* ---------- 11. 사람 ---------- */
+const player = { x:0.5, y:70, z:0.5, vx:0, vy:0, vz:0, yaw:0, pitch:0,
+                 ground:false, fly:false, water:false, head:false };
+const keys = new Set();
+function forwardVec(){
+  const cp = Math.cos(player.pitch);
+  return [-Math.sin(player.yaw) * cp, Math.sin(player.pitch), -Math.cos(player.yaw) * cp];
+}
+function boxHits(x, y, z){
+  const x0 = Math.floor(x - PW), x1 = Math.floor(x + PW);
+  const y0 = Math.floor(y),      y1 = Math.floor(y + PH - 0.02);
+  const z0 = Math.floor(z - PW), z1 = Math.floor(z + PW);
+  for (let by = y0; by <= y1; by++) for (let bz = z0; bz <= z1; bz++) for (let bx = x0; bx <= x1; bx++)
+    if (isSolid(world.getBlock(bx, by, bz))) return true;
+  return false;
+}
+function moveAxis(axis, d){
+  if (d === 0) return false;
+  const before = player[axis];
+  player[axis] = before + d;
+  if (!boxHits(player.x, player.y, player.z)) return false;
+  player[axis] = before;
+  const step = Math.sign(d) * 0.02;                     // 벽에 닿을 때까지 조금씩 붙인다
+  for (let moved = 0; Math.abs(moved) < Math.abs(d); moved += step){
+    player[axis] += step;
+    if (boxHits(player.x, player.y, player.z)){ player[axis] -= step; break; }
+  }
+  return true;
+}
+function updatePlayer(dt){
+  const eye = player.y + EYE;
+  // 발밑 청크가 아직 안 만들어졌으면 그 자리에 선다 세상을 뚫고 떨어지지 않게
+  const under = world.chunk(Math.floor(player.x) >> 4, Math.floor(player.z) >> 4);
+  const loaded = !!(under && under.gen);
+  if (!loaded){ player.vy = 0; if (!player.fly) player.ground = true; }
+  player.water = world.getBlock(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)) === WATER;
+  player.head  = world.getBlock(Math.floor(player.x), Math.floor(eye), Math.floor(player.z)) === WATER;
+
+  let fx = 0, fz = 0;
+  if (keys.has('KeyW')) fz += 1; if (keys.has('KeyS')) fz -= 1;
+  if (keys.has('KeyD')) fx += 1; if (keys.has('KeyA')) fx -= 1;
+  fx += touch.mx; fz += touch.mz;
+  const len = Math.hypot(fx, fz);
+  if (len > 1){ fx /= len; fz /= len; }
+  const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+  const wx = fx * cos - fz * sin, wz = fx * sin + fz * cos;   // 화면 기준을 월드 기준으로
+
+  const run = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const speed = player.fly ? (run ? FLY * 1.8 : FLY) : player.water ? WALK * 0.62 : run ? RUN : WALK;
+  const want = player.fly || player.ground || player.water ? 1 : 0.38;   // 공중에서는 덜 듣는다
+  const tx = wx * speed, tz = wz * speed;
+  const k = Math.min(1, dt * (player.fly ? 9 : 12) * want);
+  player.vx += (tx - player.vx) * k;
+  player.vz += (tz - player.vz) * k;
+
+  const up = keys.has('Space') || touch.jump;
+  if (player.fly){
+    const down = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0;
+    player.vy += ((up ? 1 : 0) - down) * FLY * Math.min(1, dt * 10) - player.vy * Math.min(1, dt * 10);
+  } else if (player.water){
+    player.vy += (-GRAV * 0.22) * dt;
+    if (up) player.vy = 4.2;
+    player.vy = Math.max(player.vy, -4.5);
+  } else {
+    player.vy -= GRAV * dt;
+    if (up && player.ground){ player.vy = JUMP; player.ground = false; }
+    player.vy = Math.max(player.vy, -54);
+  }
+
+  // 축마다 따로 밀어 넣는다 걸리면 그 축만 멈춘다
+  const dx = player.vx * dt, dz = player.vz * dt;
+  const x0 = player.x, z0 = player.z, y0 = player.y;
+  const hitX = moveAxis('x', dx);
+  const hitZ = moveAxis('z', dz);
+  if ((hitX || hitZ) && player.ground && !player.fly){
+    // 한 칸 턱이면 저절로 오른다 더 나아가지 못하면 없던 일로 한다
+    const wallX = player.x, wallZ = player.z;
+    player.x = x0; player.z = z0; player.y = y0 + 0.6;
+    let ok = !boxHits(player.x, player.y, player.z);
+    if (ok){
+      moveAxis('x', dx); moveAxis('z', dz);
+      ok = Math.abs(player.x - x0) + Math.abs(player.z - z0)
+         > Math.abs(wallX - x0) + Math.abs(wallZ - z0) + 1e-4;
+    }
+    if (!ok){ player.x = wallX; player.z = wallZ; player.y = y0; }
+  }
+  if (hitX) player.vx = 0;
+  if (hitZ) player.vz = 0;
+
+  const hitY = loaded ? moveAxis('y', player.vy * dt) : false;
+  if (hitY){
+    const landed = player.vy < 0;
+    player.ground = landed;
+    if (landed && player.fly) player.fly = false;        // 땅에 내려서면 날기를 접는다
+    player.vy = 0;
+  } else if (player.vy !== 0) player.ground = false;
+
+  if (player.y < -20){ respawn(); }                       // 세상 밖으로 떨어지면 되돌린다
+}
+let spawn = null;
+function findSpawn(){
+  // 바다 한가운데서 시작하지 않게 물 위로 솟은 땅을 나선으로 찾는다
+  for (let r = 0; r <= 320; r += 6){
+    const n = r === 0 ? 1 : 12;
+    for (let a = 0; a < n; a++){
+      const t = a / n * Math.PI * 2;
+      const x = Math.round(Math.cos(t) * r), z = Math.round(Math.sin(t) * r);
+      if (heightAt(x, z) > SEA + 2) return { x: x + 0.5, z: z + 0.5 };
+    }
+  }
+  return { x:0.5, z:0.5 };
+}
+function respawn(){
+  if (!spawn) spawn = findSpawn();
+  player.x = spawn.x; player.z = spawn.z;
+  player.y = heightAt(Math.floor(spawn.x), Math.floor(spawn.z)) + 2.2;
+  player.vx = player.vy = player.vz = 0; player.fly = false;
+}
+
+/* ---------- 12. 시선이 닿는 블록 ---------- */
+function raycast(){
+  const [dx, dy, dz] = forwardVec();
+  const ox = player.x, oy = player.y + EYE, oz = player.z;
+  let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
+  const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+  const dX = dx === 0 ? Infinity : Math.abs(1 / dx);
+  const dY = dy === 0 ? Infinity : Math.abs(1 / dy);
+  const dZ = dz === 0 ? Infinity : Math.abs(1 / dz);
+  let tX = dx === 0 ? Infinity : ((dx > 0 ? x + 1 - ox : ox - x) * dX);
+  let tY = dy === 0 ? Infinity : ((dy > 0 ? y + 1 - oy : oy - y) * dY);
+  let tZ = dz === 0 ? Infinity : ((dz > 0 ? z + 1 - oz : oz - z) * dZ);
+  let nx = 0, ny = 0, nz = 0, t = 0;
+  for (let i = 0; i < 160 && t <= REACH; i++){
+    const id = world.getBlock(x, y, z);
+    if (id !== AIR && !BLOCKS[id].fluid) return { x, y, z, nx, ny, nz };
+    if (tX < tY && tX < tZ){ x += sx; t = tX; tX += dX; nx = -sx; ny = 0; nz = 0; }
+    else if (tY < tZ){ y += sy; t = tY; tY += dY; nx = 0; ny = -sy; nz = 0; }
+    else { z += sz; t = tZ; tZ += dZ; nx = 0; ny = 0; nz = -sz; }
+  }
+  return null;
+}
+function breakBlock(){
+  const h = raycast();
+  if (!h) return;
+  if (BLOCKS[world.getBlock(h.x, h.y, h.z)].hard){ toast('기반암은 부술 수 없다'); return; }
+  world.setBlock(h.x, h.y, h.z, AIR, true);
+}
+function placeBlock(){
+  const h = raycast();
+  if (!h) return;
+  const x = h.x + h.nx, y = h.y + h.ny, z = h.z + h.nz;
+  const cur = world.getBlock(x, y, z);
+  if (cur !== AIR && cur !== WATER) return;
+  // 제 몸 안에는 놓지 못한다
+  if (x + 1 > player.x - PW && x < player.x + PW &&
+      z + 1 > player.z - PW && z < player.z + PW &&
+      y + 1 > player.y && y < player.y + PH) return;
+  world.setBlock(x, y, z, HOTBAR[sel], true);
+}
+function pickBlock(){
+  const h = raycast();
+  if (!h) return;
+  const id = world.getBlock(h.x, h.y, h.z);
+  const i = HOTBAR.indexOf(id);
+  if (i >= 0) select(i);
+}
+
+/* ---------- 13. 청크 살림 ---------- */
+let genBudget = 4, meshBudget = 4;
+function stream(){
+  const pcx = Math.floor(player.x) >> 4, pcz = Math.floor(player.z) >> 4;
+  // 멀어진 청크는 지운다
+  for (const [k, c] of world.chunks){
+    if (Math.abs(c.cx - pcx) > RENDER + 2 || Math.abs(c.cz - pcz) > RENDER + 2){
+      if (c.mesh) destroy(c.mesh);
+      if (c.wmesh) destroy(c.wmesh);
+      world.chunks.delete(k);
+      if (world._ck === k){ world._ck = null; world._c = null; }
+    }
+  }
+  // 가까운 곳부터 만든다
+  const todo = [];
+  for (let dz = -RENDER; dz <= RENDER; dz++) for (let dx = -RENDER; dx <= RENDER; dx++){
+    const d = dx * dx + dz * dz;
+    if (d > (RENDER + 0.5) * (RENDER + 0.5)) continue;
+    const cx = pcx + dx, cz = pcz + dz;
+    if (!world.chunks.has(key(cx, cz))) todo.push([d, cx, cz]);
+  }
+  todo.sort((a, b) => a[0] - b[0]);
+  const t0 = performance.now();
+  for (let i = 0; i < todo.length; i++){
+    const c = new Chunk(todo[i][1], todo[i][2]);
+    world.chunks.set(key(c.cx, c.cz), c);
+    world._ck = null;
+    world.generate(c);
+    if (performance.now() - t0 > genBudget) break;
+  }
+  // 이웃이 다 준비된 청크만 굽는다 경계면이 비지 않게
+  const bake = [];
+  for (const c of world.chunks.values()){
+    if (!c.dirty || !c.gen) continue;
+    let ready = true;
+    for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const n = world.chunks.get(key(c.cx + dx, c.cz + dz));
+      if (!n || !n.gen){ ready = false; break; }
+    }
+    if (ready) bake.push([(c.cx - pcx) ** 2 + (c.cz - pcz) ** 2, c]);
+  }
+  bake.sort((a, b) => a[0] - b[0]);
+  const t1 = performance.now();
+  for (const [, c] of bake){
+    remesh(c);
+    if (performance.now() - t1 > meshBudget) break;
+  }
+}
+
+/* ---------- 14. 그리기 ---------- */
+const SKY = [0.55, 0.74, 0.93], UNDER = [0.13, 0.33, 0.62];
+let W = 0, H = 0, dpr = 1;
+function resize(){
+  dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  W = Math.max(1, Math.round(cv.clientWidth * dpr));
+  H = Math.max(1, Math.round(cv.clientHeight * dpr));
+  if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+}
+window.addEventListener('resize', resize);
+
+let drawnChunks = 0, drawnTris = 0;
+function render(time){
+  resize();
+  const sky = player.head ? UNDER : SKY;
+  gl.viewport(0, 0, W, H);
+  gl.clearColor(sky[0], sky[1], sky[2], 1);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.cullFace(gl.BACK);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  const [fx, fy, fz] = forwardVec();
+  const far = player.head ? 26 : (RENDER + 1) * CX;
+  perspective(matP, (player.head ? 62 : 70) * Math.PI / 180, W / H, 0.08, far * 1.4);
+  lookDir(matV, player.x, player.y + EYE, player.z, fx, fy, fz);
+  mul(matVP, matP, matV);
+  frustum(matVP);
+
+  gl.useProgram(progBlock);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
+  gl.uniform1i(U.tex, 0);
+  gl.uniformMatrix4fv(U.vp, false, matVP);
+  gl.uniform3f(U.cam, player.x, player.y + EYE, player.z);
+  gl.uniform3fv(U.fogColor, sky);
+  gl.uniform1f(U.fogNear, far * 0.55);
+  gl.uniform1f(U.fogFar, far);
+  gl.uniform1f(U.time, time / 1000);
+
+  drawnChunks = 0; drawnTris = 0;
+  const visible = [];
+  for (const c of world.chunks.values()){
+    if (!c.mesh && !c.wmesh) continue;
+    const x0 = c.cx * CX, z0 = c.cz * CZ;
+    if (!boxVisible(x0, 0, z0, x0 + CX, CH, z0 + CZ)) continue;
+    visible.push(c);
+  }
+  gl.uniform1f(U.wave, 0);
+  for (const c of visible){
+    if (!c.mesh) continue;
+    gl.uniform3f(U.origin, c.cx * CX, 0, c.cz * CZ);
+    gl.bindVertexArray(c.mesh.vao);
+    gl.drawElements(gl.TRIANGLES, c.mesh.count, gl.UNSIGNED_INT, 0);
+    drawnChunks++; drawnTris += c.mesh.count / 3;
+  }
+
+  // 보고 있는 블록 테두리
+  const hit = raycast();
+  if (hit){
+    gl.useProgram(progLine);
+    gl.uniformMatrix4fv(UL.vp, false, matVP);
+    gl.uniform3f(UL.origin, hit.x, hit.y, hit.z);
+    gl.bindVertexArray(lineVao);
+    gl.drawArrays(gl.LINES, 0, 24);
+    gl.useProgram(progBlock);
+  }
+
+  // 물은 뒤에 한 번 더 반투명하게
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.disable(gl.CULL_FACE);
+  gl.uniform1f(U.wave, 1);
+  for (const c of visible){
+    if (!c.wmesh) continue;
+    gl.uniform3f(U.origin, c.cx * CX, 0, c.cz * CZ);
+    gl.bindVertexArray(c.wmesh.vao);
+    gl.drawElements(gl.TRIANGLES, c.wmesh.count, gl.UNSIGNED_INT, 0);
+    drawnTris += c.wmesh.count / 3;
+  }
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  gl.bindVertexArray(null);
+}
+
+/* ---------- 15. 저장 ---------- */
+let saveTimer = 0;
+function saveSoon(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 600);
+}
+function save(){
+  try {
+    const o = {};
+    for (const [k, m] of world.edits){ const e = {}; for (const [i, id] of m) e[i] = id; o[k] = e; }
+    localStorage.setItem(SAVE_KEY + ':' + SEED, JSON.stringify(o));
+  } catch { /* 저장 공간이 없으면 조용히 넘어간다 */ }
+}
+function loadEdits(){
+  world.edits.clear();
+  try {
+    const raw = localStorage.getItem(SAVE_KEY + ':' + SEED);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    for (const k in o){
+      const m = new Map();
+      for (const i in o[k]) m.set(+i, o[k][i]);
+      world.edits.set(k, m);
+    }
+  } catch { world.edits.clear(); }
+}
+function resetWorld(keepEdits){
+  for (const c of world.chunks.values()){ if (c.mesh) destroy(c.mesh); if (c.wmesh) destroy(c.wmesh); }
+  world.chunks.clear(); world._ck = null; world._c = null;
+  spawn = null;
+  if (!keepEdits){ world.edits.clear(); save(); }
+  respawn();
+  for (let i = 0; i < 12; i++) stream();               // 발밑이 빌 틈 없이 미리 만든다
+  const h = world.heightAtW(Math.floor(player.x), Math.floor(player.z));
+  player.y = Math.max(h + 1.05, SEA + 1.05);
+}
+
+/* ---------- 16. 화면 조작 ---------- */
+const $ = (id) => document.getElementById(id);
+const elMenu = $('menu'), elHud = $('hud'), elToast = $('toast'), elName = $('slotname');
+let sel = 0, playing = false, toastTimer = 0, nameTimer = 0;
+
+function toast(msg){
+  elToast.textContent = msg;
+  elToast.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => elToast.classList.remove('on'), 1400);
+}
+function iconOf(layer){
+  const c = document.createElement('canvas');
+  c.width = c.height = TILE;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(TILE, TILE);
+  img.data.set(tiles[layer]);
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+function buildHotbar(){
+  const bar = $('hotbar');
+  bar.innerHTML = '';
+  HOTBAR.forEach((id, i) => {
+    const d = document.createElement('div');
+    d.className = 'slot' + (i === sel ? ' sel' : '');
+    d.title = BLOCKS[id].name;
+    d.appendChild(iconOf(BLOCKS[id].L[1]));
+    const n = document.createElement('i'); n.textContent = i + 1; d.appendChild(n);
+    d.addEventListener('pointerdown', (e) => { e.preventDefault(); select(i); });
+    bar.appendChild(d);
+  });
+}
+function select(i){
+  sel = (i + HOTBAR.length) % HOTBAR.length;
+  document.querySelectorAll('.slot').forEach((el, k) => el.classList.toggle('sel', k === sel));
+  elName.textContent = BLOCKS[HOTBAR[sel]].name;
+  elName.classList.add('on');
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(() => elName.classList.remove('on'), 1100);
+}
+
+/* ---------- 17. 손과 눈 ---------- */
+const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const touch = { mx:0, mz:0, jump:false, lookId:-1, lx:0, ly:0, stickId:-1 };
+let mouseL = false, mouseR = false, actTimer = 0, lastSpace = 0;
+
+function start(){
+  playing = true;
+  elMenu.classList.add('hide');
+  if (isTouch) $('touch').classList.add('on');
+  else {
+    const req = cv.requestPointerLock && cv.requestPointerLock();
+    if (req && req.catch) req.catch(() => toast('마우스 잠금이 막혔다 화면을 한 번 더 눌러달라'));
+  }
+}
+function stop(){
+  playing = false;
+  elMenu.classList.remove('hide');
+  $('touch').classList.remove('on');
+  keys.clear(); mouseL = mouseR = false;
+  touch.mx = touch.mz = 0; touch.jump = false;
+  save();
+}
+$('play').addEventListener('click', start);
+cv.addEventListener('pointerdown', (e) => { if (!playing && !isTouch) start(); });
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement === cv){ playing = true; elMenu.classList.add('hide'); }
+  else if (!isTouch && playing) stop();
+});
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+function look(dx, dy, s){
+  player.yaw   -= dx * s;
+  player.pitch -= dy * s;
+  const lim = Math.PI / 2 - 0.001;
+  player.pitch = Math.max(-lim, Math.min(lim, player.pitch));
+  player.yaw = ((player.yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+}
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement !== cv) return;
+  look(e.movementX, e.movementY, 0.0022);
+});
+cv.addEventListener('mousedown', (e) => {
+  if (!playing) return;
+  if (e.button === 0){ mouseL = true; breakBlock(); actTimer = 0.28; }
+  if (e.button === 1){ e.preventDefault(); pickBlock(); }
+  if (e.button === 2){ mouseR = true; placeBlock(); actTimer = 0.28; }
+});
+document.addEventListener('mouseup', (e) => {
+  if (e.button === 0) mouseL = false;
+  if (e.button === 2) mouseR = false;
+});
+window.addEventListener('wheel', (e) => {
+  if (!playing) return;
+  select(sel + (e.deltaY > 0 ? 1 : -1));
+}, { passive:true });
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape'){ if (playing){ stop(); document.exitPointerLock && document.exitPointerLock(); } return; }
+  if (!playing) return;
+  if (e.code === 'F3'){ e.preventDefault(); elHud.classList.toggle('on'); return; }
+  if (e.code.startsWith('Digit')){
+    const n = +e.code.slice(5);
+    if (n >= 1 && n <= 9) select(n - 1);
+    return;
+  }
+  if (e.code === 'KeyF'){ player.fly = !player.fly; player.vy = 0; toast(player.fly ? '날기' : '걷기'); return; }
+  if (e.code === 'Space'){
+    e.preventDefault();
+    const t = performance.now();
+    if (t - lastSpace < 280){ player.fly = !player.fly; player.vy = 0; toast(player.fly ? '날기' : '걷기'); }
+    lastSpace = t;
+  }
+  if (['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight','Space'].includes(e.code)) e.preventDefault();
+  keys.add(e.code);
+});
+window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('blur', () => { keys.clear(); mouseL = mouseR = false; });
+
+/* 터치 왼쪽 동그라미로 걷고 나머지 화면을 끌어 둘러본다 */
+{
+  const stick = $('stick'), knob = $('knob');
+  stick.addEventListener('pointerdown', (e) => {
+    stick.setPointerCapture(e.pointerId); touch.stickId = e.pointerId; e.preventDefault();
+  });
+  stick.addEventListener('pointermove', (e) => {
+    if (touch.stickId !== e.pointerId) return;
+    const r = stick.getBoundingClientRect();
+    let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+    let dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+    const l = Math.hypot(dx, dy);
+    if (l > 1){ dx /= l; dy /= l; }
+    touch.mx = dx; touch.mz = -dy;
+    knob.style.transform = `translate(${dx * 34}px, ${dy * 34}px)`;
+  });
+  const end = (e) => {
+    if (touch.stickId !== e.pointerId) return;
+    touch.stickId = -1; touch.mx = touch.mz = 0; knob.style.transform = '';
+  };
+  stick.addEventListener('pointerup', end);
+  stick.addEventListener('pointercancel', end);
+
+  cv.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !playing) return;
+    touch.lookId = e.pointerId; touch.lx = e.clientX; touch.ly = e.clientY;
+  });
+  cv.addEventListener('pointermove', (e) => {
+    if (touch.lookId !== e.pointerId) return;
+    look(e.clientX - touch.lx, e.clientY - touch.ly, 0.005);
+    touch.lx = e.clientX; touch.ly = e.clientY;
+  });
+  const lookEnd = (e) => { if (touch.lookId === e.pointerId) touch.lookId = -1; };
+  cv.addEventListener('pointerup', lookEnd);
+  cv.addEventListener('pointercancel', lookEnd);
+
+  const hold = (el, down, up) => {
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); down(); });
+    el.addEventListener('pointerup', (e) => { e.preventDefault(); up && up(); });
+    el.addEventListener('pointercancel', () => up && up());
+  };
+  hold($('bJump'), () => touch.jump = true, () => touch.jump = false);
+  hold($('bBreak'), () => { mouseL = true; breakBlock(); actTimer = 0.3; }, () => mouseL = false);
+  hold($('bPlace'), () => { mouseR = true; placeBlock(); actTimer = 0.3; }, () => mouseR = false);
+}
+
+/* ---------- 18. 메뉴 ---------- */
+const elSeed = $('seed');
+function setSeed(s, keepEdits){
+  SEED = ((s | 0) || 1) >>> 0;
+  elSeed.value = SEED;
+  location.hash = 'seed=' + SEED;
+  if (!keepEdits) loadEdits();
+  resetWorld(true);
+}
+$('newworld').addEventListener('click', () => {
+  setSeed(Math.floor(Math.random() * 2147483647));
+  toast('새 씨앗 ' + SEED);
+});
+$('reset').addEventListener('click', () => {
+  world.edits.clear(); save();
+  resetWorld(true);
+  toast('부순 자리를 되돌렸다');
+});
+$('toggleHud').addEventListener('click', () => elHud.classList.toggle('on'));
+elSeed.addEventListener('change', () => {
+  const v = parseInt(elSeed.value.replace(/\D/g, ''), 10);
+  if (!isNaN(v)) { setSeed(v); toast('씨앗 ' + SEED); }
+});
+
+/* ---------- 19. 한 바퀴 ---------- */
+const hPos = $('hPos'), hFps = $('hFps'), hChunks = $('hChunks'), hTris = $('hTris'), hMode = $('hMode');
+let last = performance.now(), fpsT = 0, fpsN = 0, hudT = 0;
+
+function loop(now){
+  requestAnimationFrame(loop);
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.1) dt = 0.1;                                 // 탭이 멈췄다 돌아와도 튀지 않게
+
+  if (playing){
+    updatePlayer(dt);
+    if (mouseL || mouseR){
+      actTimer -= dt;
+      if (actTimer <= 0){ actTimer = 0.22; mouseL ? breakBlock() : placeBlock(); }
+    }
+  }
+  stream();
+  render(now);
+
+  fpsN++; fpsT += dt; hudT += dt;
+  if (hudT > 0.25){
+    hudT = 0;
+    hPos.textContent = `${player.x.toFixed(1)} ${player.y.toFixed(1)} ${player.z.toFixed(1)}`;
+    hChunks.textContent = drawnChunks + ' / ' + world.chunks.size;
+    hTris.textContent = (drawnTris / 1000).toFixed(1) + 'k';
+    hMode.textContent = player.fly ? '날기' : player.water ? '헤엄' : player.ground ? '걷기' : '공중';
+  }
+  if (fpsT > 0.5){ hFps.textContent = Math.round(fpsN / fpsT); fpsN = 0; fpsT = 0; }
+}
+
+/* ---------- 20. 첫걸음 ---------- */
+(function boot(){
+  const m = /seed=(\d+)/.exec(location.hash);
+  SEED = m ? (+m[1] >>> 0) || 20260915 : 20260915;
+  elSeed.value = SEED;
+  loadEdits();
+  buildHotbar();
+  select(0);
+  resize();
+  resetWorld(true);
+  // 땅에 박힌 채로 시작하지 않게 위로 밀어 올린다
+  for (let i = 0; i < CH && boxHits(player.x, player.y, player.z); i++) player.y += 1;
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
