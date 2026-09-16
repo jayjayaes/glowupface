@@ -280,6 +280,7 @@ canvas{image-rendering:auto}
       <button class="btn ghost" id="newworld">새 월드</button>
       <button class="btn ghost" id="reset">처음으로 되돌리기</button>
       <button class="btn ghost" id="toggleHud">정보 표시</button>
+      <button class="btn ghost" id="toggleSound">소리 끄기</button>
     </div>
     <div class="seedrow">
       <label for="seed">씨앗</label>
@@ -345,8 +346,10 @@ const T = {
   I_FLINT:43, I_STEEL:44, I_HOE:45, I_SEED:46, I_WHEAT:47, I_BREAD:48, I_COOKED:49,
   I_BUCKET:50, I_WBUCKET:51, FARMLAND_WET:52,
   ICE:53, LAVA:54, CARROT0:55, CARROT1:56, CARROT2:57, CARROT3:58, I_CARROT:59, I_LBUCKET:60,
+  COW:61, COW_FACE:62, CHICKEN:63, CHICKEN_FACE:64, SPIDER:65, SPIDER_FACE:66,
+  POTATO0:67, POTATO1:68, POTATO2:69, POTATO3:70, I_POTATO:71, I_BAKED:72,
 };
-const LAYERS = 61, TILE = 32;
+const LAYERS = 73, TILE = 32;
 
 /* ---------- 3. 블록과 물건 ---------- */
 // L: [윗면, 옆면, 아랫면] · tough: 맨손으로 캐는 데 걸리는 초 · drop: 캐면 나오는 것
@@ -397,6 +400,9 @@ for (let i = 1; i <= LFLOW_MAX; i++)
 for (let i = 0; i < 4; i++)
   BLOCKS.push({ name: i === 3 ? '다 자란 당근' : '당근 싹', L:[T['CARROT' + i],T['CARROT' + i],T['CARROT' + i]],
                 tough:0.05, see:true, pass:true, cross:true, crop:i, back:115, ripe:115 });
+for (let i = 0; i < 4; i++)
+  BLOCKS.push({ name: i === 3 ? '다 자란 감자' : '감자 싹', L:[T['POTATO' + i],T['POTATO' + i],T['POTATO' + i]],
+                tough:0.05, see:true, pass:true, cross:true, crop:i, back:117, ripe:117 });
 const isLava = (id) => id === LAVA || (id >= LFLOW0 && id < LFLOW0 + LFLOW_MAX);
 const lavaOf = (id) => id === LAVA ? 0 : (id >= LFLOW0 && id < LFLOW0 + LFLOW_MAX ? BLOCKS[id].flow : 99);
 const isIce = (id) => id === ICE;
@@ -423,6 +429,8 @@ const ITEMS = {
   114:{ name:'물동이',   tex:T.I_WBUCKET, water:true },
   115:{ name:'당근',     tex:T.I_CARROT, food:4, plant:38 },
   116:{ name:'용암동이', tex:T.I_LBUCKET, lava:true },
+  117:{ name:'감자',     tex:T.I_POTATO, food:3, plant:42 },
+  118:{ name:'구운 감자', tex:T.I_BAKED, food:7 },
 };
 const itemName = (id) => id >= 100 ? ITEMS[id].name : BLOCKS[id].name;
 const itemTex  = (id) => id >= 100 ? ITEMS[id].tex  : BLOCKS[id].L[1];
@@ -449,7 +457,7 @@ const RECIPES = [
 ];
 // 화로에서 굽는 것 · [재료, 결과, 굽는 데 걸리는 초]
 const SMELT = [
-  [16, 101, 8], [5, 11, 6], [103, 112, 7], [6, 100, 9], [3, 4, 6],
+  [16, 101, 8], [5, 11, 6], [103, 112, 7], [6, 100, 9], [3, 4, 6], [117, 118, 6],
 ];
 const FUEL = { 100: 40, 8: 9, 6: 14, 102: 4 };   // 땔감이 타는 초
 
@@ -908,6 +916,56 @@ function buildTiles(){
     if (d < w) return jit([232, 132, 44], n, 20);
     return [0, 0, 0, 0];
   });
+  t[T.COW] = tile((x, y, n) => {
+    const patch = vn(x, y, 6, 271);
+    return patch > .56 ? jit([236, 234, 228], n, 10) : jit([74, 56, 44], n, 14);   // 얼룩
+  });
+  t[T.COW_FACE] = tile((x, y, n) => {
+    const base = vn(x, y, 6, 271) > .5 ? jit([236, 234, 228], n, 8) : jit([74, 56, 44], n, 12);
+    if (y > 16 && x > 8 && x < 24) return jit([196, 160, 152], n, 10);             // 주둥이
+    if (y > 7 && y < 13 && (Math.abs(x - 9) < 3 || Math.abs(x - 22) < 3)) return [22, 20, 20];
+    return base;
+  });
+  t[T.CHICKEN] = tile((x, y, n) => jit(shift([238, 238, 232], (vn(x, y, 5, 281) - .5) * 14), n, 10));
+  t[T.CHICKEN_FACE] = tile((x, y, n) => {
+    if (y > 17 && y < 24 && Math.abs(x - 16) < 5) return jit([236, 160, 50], n, 14);   // 부리
+    if (y < 7 && Math.abs(x - 16) < 6) return jit([200, 60, 50], n, 16);               // 볏
+    if (y > 9 && y < 15 && (Math.abs(x - 9) < 3 || Math.abs(x - 22) < 3)) return [24, 22, 22];
+    return jit([238, 238, 232], n, 10);
+  });
+  t[T.SPIDER] = tile((x, y, n) => {
+    const fuzz = vn(x, y, 3, 291);
+    return jit(shift([52, 40, 36], (fuzz - .5) * 26), n, 18);
+  });
+  t[T.SPIDER_FACE] = tile((x, y, n) => {
+    for (const [ex, ey, r] of [[10,12,3],[21,12,3],[13,19,2],[19,19,2]])
+      if (Math.hypot(x - ex, y - ey) < r) return [214, 42, 34];                        // 붉은 눈
+    return jit(shift([52, 40, 36], (vn(x, y, 3, 291) - .5) * 26), n, 18);
+  });
+  const potatoTile = (stage) => tile((x, y, n) => {
+    const col = x % 8;
+    if (col > 2) return [0, 0, 0, 0];
+    const top = 25 - stage * 5.5;
+    if (y < top) return [0, 0, 0, 0];
+    if (stage === 3 && y > 27 && col !== 1) return jit([206, 176, 116], n, 16);        // 캘 때가 된 알
+    return jit(mix3([104, 158, 74], [124, 166, 70], stage / 3), n, 20);
+  });
+  t[T.POTATO0] = potatoTile(0); t[T.POTATO1] = potatoTile(1);
+  t[T.POTATO2] = potatoTile(2); t[T.POTATO3] = potatoTile(3);
+  t[T.I_POTATO] = tile((x, y, n) => {
+    const d = Math.hypot((x - 16) / 9.5, (y - 17) / 7.5) + (vn(x, y, 5, 301) - .5) * .16;
+    if (d > 1) return [0, 0, 0, 0];
+    if (d > .86) return [150, 118, 62, 255];
+    if (vn(x, y, 3, 303) > .72) return jit([168, 132, 74], n, 12);                     // 눈
+    return jit([206, 172, 106], n, 14);
+  });
+  t[T.I_BAKED] = tile((x, y, n) => {
+    const d = Math.hypot((x - 16) / 9.5, (y - 17) / 7.5) + (vn(x, y, 5, 301) - .5) * .16;
+    if (d > 1) return [0, 0, 0, 0];
+    if (d > .84) return [96, 62, 30, 255];
+    if (y < 15 && vn(x, y, 3, 305) > .6) return jit([226, 196, 140], n, 14);           // 갈라진 속살
+    return jit([150, 104, 52], n, 16);
+  });
   t[T.I_LBUCKET] = tile((x, y, n) => {
     const inset = (y - 10) * 0.28;
     if (y < 9 || y > 26) return [0, 0, 0, 0];
@@ -1048,8 +1106,10 @@ const world = {
       }
       put(wx, y0 + 4, wz, 4);                                          // 지붕
     }
-    put(hs.x, y0 + 1, hs.z + r, AIR);                                  // 문
-    put(hs.x, y0 + 2, hs.z + r, AIR);
+    for (const dx of [0, 1]){                                          // 문은 두 칸으로 넓게 낸다
+      put(hs.x + dx, y0 + 1, hs.z + r, AIR);
+      put(hs.x + dx, y0 + 2, hs.z + r, AIR);
+    }
     put(hs.x, y0 + 3, hs.z, 17);                                       // 천장에 빛돌 하나
   },
 
@@ -1313,6 +1373,8 @@ function simTick(dt){
     for (const k of [...world.fires]){
       const c = k.split(','), x = +c[0], y = +c[1], z = +c[2];
       if (world.getBlock(x, y, z) !== FIRE){ world.fires.delete(k); continue; }
+      const fd = Math.hypot(x - player.x, y - player.y, z - player.z);
+      if (fd < 9 && Math.random() < 0.5) Sound.crackle(1 - fd / 9);
       if (weather.level > 0.4 && world.sunlit(x, y, z)){   // 비를 맞으면 꺼진다
         world.setBlock(x, y, z, AIR, true); continue;
       }
@@ -1892,6 +1954,110 @@ function updateWeather(dt){
 }
 const weatherName = () => weather.level < 0.15 ? '' : (weather.kind === 2 ? ' · 눈' : ' · 비');
 
+/* ---------- 15.6. 소리 ---------- */
+// 소리 파일도 없다 웹오디오로 그때그때 만들어 낸다
+const Sound = {
+  ctx:null, master:null, noise:null, on:true, ready:false,
+  init(){
+    if (this.ctx) return;
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return;
+    this.ctx = new C();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.34;
+    this.master.connect(this.ctx.destination);
+    const len = Math.floor(this.ctx.sampleRate * 0.5);
+    this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = this.noise.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    this.ready = true;
+  },
+  gain(vol, dur, delay){
+    const g = this.ctx.createGain(), t = this.ctx.currentTime + (delay || 0);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.connect(this.master);
+    return { g, t };
+  },
+  tone(freq, dur, type, vol, slide, delay){
+    if (!this.on || !this.ready) return;
+    const { g, t } = this.gain(vol, dur, delay);
+    const o = this.ctx.createOscillator();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * slide), t + dur);
+    o.connect(g);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  hiss(dur, freq, vol, q, delay){
+    if (!this.on || !this.ready) return;
+    const { g, t } = this.gain(vol, dur, delay);
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.playbackRate.value = 0.7 + Math.random() * 0.6;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+    src.connect(f); f.connect(g);
+    src.start(t); src.stop(t + dur + 0.02);
+  },
+  // 블록마다 밟고 캐는 소리가 다르다
+  matter(id){
+    if (id === AIR) return null;
+    if (isWater(id)) return 'water';
+    if (id === 1 || id === 7 || id === 13 || id === 18 || BLOCKS[id].crop !== undefined) return 'soft';
+    if (id === 6 || id === 8 || id === 25) return 'wood';
+    if (id === 5 || id === 2 || id === 14 || id === 19 || id === FARM_WET) return 'sand';
+    if (isLava(id)) return 'lava';
+    return 'stone';
+  },
+  step(id){
+    const m = this.matter(id);
+    if (!m) return;
+    if (m === 'water') this.hiss(0.16, 900, 0.08, 0.7);
+    else if (m === 'soft') this.hiss(0.10, 1700, 0.05, 1.4);
+    else if (m === 'wood') { this.hiss(0.07, 700, 0.06, 2); this.tone(150, 0.06, 'sine', 0.05, 0.7); }
+    else if (m === 'sand') this.hiss(0.10, 2600, 0.04, 0.8);
+    else this.hiss(0.06, 1100, 0.06, 3);
+  },
+  dig(id){
+    const m = this.matter(id);
+    if (!m) return;
+    if (m === 'soft') this.hiss(0.08, 1500, 0.07, 1.2);
+    else if (m === 'wood') this.hiss(0.09, 620, 0.09, 2.2);
+    else if (m === 'sand') this.hiss(0.09, 2400, 0.06, 0.9);
+    else this.hiss(0.06, 900, 0.09, 4);
+  },
+  broke(id){
+    this.dig(id);
+    this.tone(220, 0.12, 'triangle', 0.05, 0.6);
+  },
+  place(id){
+    const m = this.matter(id) || 'stone';
+    this.tone(m === 'wood' ? 180 : 240, 0.09, 'sine', 0.07, 0.7);
+    this.hiss(0.05, 800, 0.05, 2);
+  },
+  hit(){ this.tone(320, 0.07, 'square', 0.05, 0.5); this.hiss(0.06, 500, 0.06, 1.5); },
+  hurt(){ this.tone(180, 0.28, 'sawtooth', 0.09, 0.45); },
+  splash(){ this.hiss(0.3, 700, 0.12, 0.6); this.tone(420, 0.2, 'sine', 0.05, 0.5); },
+  eat(){ for (let i = 0; i < 3; i++) this.hiss(0.06, 500, 0.06, 2, i * 0.1); },
+  craft(){ this.tone(520, 0.1, 'triangle', 0.07); this.tone(780, 0.14, 'triangle', 0.06, 1, 0.08); },
+  trade(){ this.tone(660, 0.1, 'sine', 0.07); this.tone(990, 0.16, 'sine', 0.06, 1, 0.09); },
+  crackle(v){ this.hiss(0.09, 1400 + Math.random() * 900, 0.03 * v, 2.5); },
+  bubble(v){ this.tone(90 + Math.random() * 40, 0.3, 'sine', 0.035 * v, 0.6); },
+  // 몹마다 다른 울음
+  voice(kind, v){
+    if (!this.on || !this.ready || v <= 0.02) return;
+    if (kind === 'pig'){ this.tone(150, 0.14, 'sawtooth', 0.08 * v, 0.7); this.tone(130, 0.12, 'sawtooth', 0.06 * v, 1.2, 0.13); }
+    else if (kind === 'sheep'){ this.tone(520, 0.34, 'sawtooth', 0.05 * v, 0.82); }
+    else if (kind === 'cow'){ this.tone(120, 0.5, 'sawtooth', 0.08 * v, 0.7); }
+    else if (kind === 'chicken'){ for (let i = 0; i < 3; i++) this.tone(1100 + i * 160, 0.06, 'square', 0.035 * v, 0.8, i * 0.09); }
+    else if (kind === 'zombie'){ this.tone(90, 0.55, 'sawtooth', 0.07 * v, 0.6); this.hiss(0.4, 300, 0.04 * v, 1); }
+    else if (kind === 'spider'){ this.hiss(0.3, 2200, 0.05 * v, 1.6); }
+    else if (kind === 'villager'){ this.tone(300, 0.18, 'square', 0.05 * v, 1.25); }
+  },
+};
+
 /* ---------- 16. 몹 ---------- */
 // 몸은 단위 상자 몇 개다 p: 왼아래앞 구석 · s: 크기 · sw: 걸을 때 흔들리는 짝
 const MOBS = {
@@ -1915,7 +2081,7 @@ const MOBS = {
       { p:[-0.24,0.00, 0.18], s:[0.13,0.46,0.13], tex:T.WOOL, sw:-1, pv:0.46 },
       { p:[ 0.11,0.00, 0.18], s:[0.13,0.46,0.13], tex:T.WOOL, sw:1, pv:0.46 },
     ] },
-  zombie: { name:'좀비', hp:20, w:0.44, h:1.82, speed:2.6, hostile:true, dmg:3, tint:[1,1,1],
+  zombie: { name:'좀비', hp:20, w:0.44, h:1.82, speed:2.6, hostile:true, dmg:3, burns:true, tint:[1,1,1],
     parts:[
       { p:[-0.22,0.72,-0.12], s:[0.44,0.62,0.24], tex:T.ZOMBIE },
       { p:[-0.22,1.34,-0.13], s:[0.44,0.44,0.26], tex:T.ZOMBIE },
@@ -1924,6 +2090,38 @@ const MOBS = {
       { p:[ 0.23,0.72,-0.09], s:[0.17,0.60,0.17], tex:T.ZOMBIE, sw:-1, pv:0.72, fix:-1.35 },
       { p:[-0.21,0.00,-0.09], s:[0.18,0.72,0.18], tex:T.ZOMBIE, sw:-1, pv:0.72 },
       { p:[ 0.03,0.00,-0.09], s:[0.18,0.72,0.18], tex:T.ZOMBIE, sw:1, pv:0.72 },
+    ] },
+  cow: { name:'소', hp:12, w:0.50, h:1.12, speed:1.15, drop:[103,3], tint:[1,1,1],
+    parts:[
+      { p:[-0.28,0.40,-0.42], s:[0.56,0.46,0.88], tex:T.COW },
+      { p:[-0.22,0.56,-0.74], s:[0.44,0.40,0.34], tex:T.COW },
+      { p:[-0.22,0.56,-0.77], s:[0.44,0.40,0.04], tex:T.COW_FACE },
+      { p:[-0.26,0.00,-0.36], s:[0.15,0.42,0.15], tex:T.COW, sw:1, pv:0.42 },
+      { p:[ 0.11,0.00,-0.36], s:[0.15,0.42,0.15], tex:T.COW, sw:-1, pv:0.42 },
+      { p:[-0.26,0.00, 0.22], s:[0.15,0.42,0.15], tex:T.COW, sw:-1, pv:0.42 },
+      { p:[ 0.11,0.00, 0.22], s:[0.15,0.42,0.15], tex:T.COW, sw:1, pv:0.42 },
+    ] },
+  chicken: { name:'닭', hp:5, w:0.24, h:0.62, speed:1.7, drop:[103,1], tint:[1,1,1],
+    parts:[
+      { p:[-0.16,0.20,-0.20], s:[0.32,0.28,0.40], tex:T.CHICKEN },
+      { p:[-0.11,0.40,-0.32], s:[0.22,0.22,0.20], tex:T.CHICKEN },
+      { p:[-0.11,0.40,-0.35], s:[0.22,0.22,0.04], tex:T.CHICKEN_FACE },
+      { p:[-0.20,0.22,-0.16], s:[0.04,0.22,0.32], tex:T.CHICKEN },
+      { p:[ 0.16,0.22,-0.16], s:[0.04,0.22,0.32], tex:T.CHICKEN },
+      { p:[-0.10,0.00,-0.06], s:[0.06,0.21,0.06], tex:T.CHICKEN, sw:1, pv:0.21 },
+      { p:[ 0.04,0.00,-0.06], s:[0.06,0.21,0.06], tex:T.CHICKEN, sw:-1, pv:0.21 },
+    ] },
+  spider: { name:'거미', hp:14, w:0.58, h:0.62, speed:3.1, hostile:true, dmg:2, tint:[1,1,1],
+    parts:[
+      { p:[-0.30,0.16,0.00], s:[0.60,0.38,0.46], tex:T.SPIDER },
+      { p:[-0.22,0.14,-0.42], s:[0.44,0.32,0.42], tex:T.SPIDER },
+      { p:[-0.22,0.14,-0.45], s:[0.44,0.32,0.04], tex:T.SPIDER_FACE },
+      { p:[-0.70,0.20,-0.26], s:[0.42,0.07,0.07], tex:T.SPIDER, sw:1, pv:0.20 },
+      { p:[-0.70,0.20,-0.02], s:[0.42,0.07,0.07], tex:T.SPIDER, sw:-1, pv:0.20 },
+      { p:[-0.70,0.20, 0.22], s:[0.42,0.07,0.07], tex:T.SPIDER, sw:1, pv:0.20 },
+      { p:[ 0.28,0.20,-0.26], s:[0.42,0.07,0.07], tex:T.SPIDER, sw:-1, pv:0.20 },
+      { p:[ 0.28,0.20,-0.02], s:[0.42,0.07,0.07], tex:T.SPIDER, sw:1, pv:0.20 },
+      { p:[ 0.28,0.20, 0.22], s:[0.42,0.07,0.07], tex:T.SPIDER, sw:-1, pv:0.20 },
     ] },
   villager: { name:'주민', hp:14, w:0.44, h:1.82, speed:1.35, tint:[1,1,1],
     parts:[
@@ -1944,6 +2142,7 @@ const TRADES = [
   { give:[8,12],   get:[100,4] }, { give:[103,6],  get:[112,6] },
   { give:[5,12],   get:[11,6] },  { give:[109,8],  get:[110,4] },
   { give:[115,10], get:[101,1] }, { give:[101,1],  get:[115,6] },
+  { give:[117,10], get:[101,1] }, { give:[101,1],  get:[117,6] },
 ];
 function pickTrades(){
   const pool = TRADES.slice(), out = [];
@@ -1986,14 +2185,18 @@ function nearestHouse(x, z){
       if (d < bd){ bd = d; best = hs; }
     }
   }
-  return best ? [best.x, best.h + 1, best.z] : null;
+  if (!best) return null;
+  // 문은 늘 +z 쪽에 하나 나 있다 마당 → 문 → 안방 차례로 밟는다
+  return { c:[best.x + 1, best.h + 1, best.z + .5],
+           d:[best.x + 1, best.h + 1, best.z + best.r + .5],
+           a:[best.x + 1, best.h + 1, best.z + best.r + 3.5] };
 }
 function spawnMob(kind, x, y, z){
   const d = MOBS[kind];
   mobs.push({ kind, def:d, x, y, z, vx:0, vy:0, vz:0, yaw:Math.random() * 6.28,
-              hp:d.hp, ground:false, walk:0, step:0, think:0, hurt:0, cool:0, burn:0, flee:0, mode:1,
+              hp:d.hp, ground:false, walk:0, step:0, think:0, hurt:0, cool:0, burn:0, flee:0, mode:1, talk:2 + Math.random() * 8,
               trades: kind === 'villager' ? pickTrades() : null,
-              home: kind === 'villager' ? nearestHouse(x, z) : null });
+              home: kind === 'villager' ? nearestHouse(x, z) : null, leg:0 });
 }
 function mobSpot(minD, maxD){
   for (let i = 0; i < 14; i++){
@@ -2017,11 +2220,12 @@ function spawnTick(dt){
   for (const m of mobs) (m.def.hostile ? hostile++ : calm++);
   if (isNight() && hostile < 9){
     const s = mobSpot(18, 34);
-    if (s) spawnMob('zombie', s[0], s[1], s[2]);
+    if (s) spawnMob(Math.random() < 0.62 ? 'zombie' : 'spider', s[0], s[1], s[2]);
   }
-  if (!isNight() && calm < 9){
+  if (!isNight() && calm < 10){
     const s = mobSpot(14, 30);
-    if (s) spawnMob(Math.random() < 0.55 ? 'pig' : 'sheep', s[0], s[1], s[2]);
+    const r = Math.random();
+    if (s) spawnMob(r < 0.32 ? 'pig' : r < 0.58 ? 'sheep' : r < 0.82 ? 'cow' : 'chicken', s[0], s[1], s[2]);
   }
   // 마을이 가까우면 주민이 서넛 거닌다
   const folk = mobs.filter(m => m.kind === 'villager').length;
@@ -2064,8 +2268,8 @@ function updateMobs(dt){
           m.cool = 1.1;
         }
       } else { m.think -= dt; if (m.think <= 0){ m.think = 2 + Math.random() * 3; m.yaw += (Math.random() - .5) * 2.4; } go = 0.5; }
-      // 햇빛에 탄다
-      if (sky.day > 0.85 && world.sunlit(Math.floor(m.x), Math.floor(m.y + 1), Math.floor(m.z))){
+      // 좀비만 햇빛에 탄다 거미는 아침에도 멀쩡하다
+      if (d.burns && sky.day > 0.85 && world.sunlit(Math.floor(m.x), Math.floor(m.y + 1), Math.floor(m.z))){
         m.burn += dt; m.hp -= dt * 3.5; m.hurt = Math.max(m.hurt, 0.15);
       }
     } else {
@@ -2089,11 +2293,17 @@ function updateMobs(dt){
           m.yaw = Math.atan2(m.x - near.x, m.z - near.z);
           go = 1.35;
         } else if (m.home && isNight()){
-          const hx = m.home[0] - m.x, hz = m.home[2] - m.z;
+          const H = m.home, way = [H.a, H.d, H.c][m.leg];
+          const hx = way[0] - m.x, hz = way[2] - m.z;
           const hd = Math.hypot(hx, hz);
-          if (hd > 1.4){ m.yaw = Math.atan2(-hx, -hz); go = 1; }
+          const outside = m.z > H.d[2] + 0.1;              // 문은 남쪽에 나 있다
+          if (m.leg < 2 && hd < 2.2) m.leg++;              // 마당을 밟았으면 문으로 문을 밟았으면 안으로
+          else if (m.leg >= 1 && outside && Math.abs(H.d[0] - m.x) > 0.4){
+            m.yaw = Math.atan2(-(H.d[0] - m.x), 0);        // 문턱 앞에서 좌우를 먼저 맞춘다
+            go = 0.8;
+          } else if (hd > (m.leg === 2 ? 1.2 : 1.6)){ m.yaw = Math.atan2(-hx, -hz); go = 1; }
           else go = 0;
-        }
+        } else if (m.home) m.leg = 0;                       // 날이 새면 다시 마당부터
       }
     }
     const under = world.getBlock(Math.floor(m.x), Math.floor(m.y + 0.2), Math.floor(m.z));
@@ -2117,6 +2327,11 @@ function updateMobs(dt){
     if (by){ m.ground = m.vy < 0; m.vy = 0; } else if (m.vy !== 0) m.ground = false;
     if (m.y < -8){ mobs.splice(i, 1); continue; }
 
+    m.talk -= dt;                                          // 이따금 운다
+    if (m.talk <= 0){
+      m.talk = 5 + Math.random() * 9;
+      if (dist < 18) Sound.voice(m.kind, Math.max(0, 1 - dist / 18));
+    }
     const spd = Math.hypot(m.vx, m.vz);
     m.step += spd * dt * 3.4;
     m.walk = spd;
@@ -2206,6 +2421,8 @@ function updatePlayer(dt){
   if (isLava(feet)) hurtPlayer(6, '용암에 빠졌다');
   player.lava = isLava(world.getBlock(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)));
   player.swing = Math.max(0, player.swing - dt * 3);
+  if (player.water && !player.wasWater) Sound.splash();                  // 첨벙
+  player.wasWater = player.water;
 
   let fx = 0, fz = 0;
   if (keys.has('KeyW')) fz += 1; if (keys.has('KeyS')) fz -= 1;
@@ -2260,6 +2477,13 @@ function updatePlayer(dt){
   }
   if (hitX) player.vx = 0;
   if (hitZ) player.vz = 0;
+  if (player.ground){                                                    // 발소리
+    player.stepDist = (player.stepDist || 0) + Math.hypot(player.x - x0, player.z - z0);
+    if (player.stepDist > 1.9){
+      player.stepDist = 0;
+      Sound.step(world.getBlock(Math.floor(player.x), Math.floor(player.y - 0.1), Math.floor(player.z)));
+    }
+  }
 
   const hitY = loaded ? moveAxis('y', player.vy * dt) : false;
   if (hitY){
@@ -2283,6 +2507,7 @@ function hurtPlayer(dmg, why, fromX, fromZ){
   player.hp -= dmg;
   player.hurt = 0.6;
   flash();
+  Sound.hurt();
   if (fromX !== undefined){
     const dx = player.x - fromX, dz = player.z - fromZ, l = Math.hypot(dx, dz) || 1;
     player.vx += dx / l * 6; player.vz += dz / l * 6; player.vy = Math.max(player.vy, 4.4);
@@ -2347,7 +2572,7 @@ function raycast(wet){
   }
   return null;
 }
-let breakKey = '', breakProg = 0, hitCool = 0;
+let breakKey = '', breakProg = 0, hitCool = 0, digSound = 0;
 function breakSpeed(def){
   const h = held();
   if (def.pick){
@@ -2365,7 +2590,7 @@ function updateBreak(dt){
     if (hitCool <= 0){
       const h = held(), tool = ITEMS[h];
       hitMob(mob, tool && tool.dmg ? tool.dmg : 3);
-      hitCool = 0.45; player.swing = 1;
+      hitCool = 0.45; player.swing = 1; Sound.hit();
     }
     return;
   }
@@ -2378,6 +2603,8 @@ function updateBreak(dt){
   if (k !== breakKey){ breakKey = k; breakProg = 0; }
   breakProg += dt * breakSpeed(def) / def.tough;
   player.swing = 1;
+  digSound -= dt;
+  if (digSound <= 0){ digSound = 0.3; Sound.dig(id); }
   showBar(breakProg);
   if (breakProg >= 1){
     breakProg = 0;
@@ -2392,6 +2619,7 @@ function harvest(x, y, z, id, def){
     else for (const sl of ['in', 'fuel', 'out']) if (tile[sl]) give(tile[sl][0], tile[sl][1]);
   }
   world.setBlock(x, y, z, AIR, true);
+  Sound.broke(id);
   if (def.crop !== undefined){
     give(def.back, 1);
     if (def.crop === 3){ give(def.ripe, 1); if (Math.random() < 0.5) give(def.ripe, 1); }
@@ -2401,6 +2629,7 @@ function harvest(x, y, z, id, def){
   if (drop) give(drop, 1);
   if (id === 1 && Math.random() < 0.28) give(109, 1);      // 잔디에서 씨앗이 나온다
   if (id === 1 && Math.random() < 0.06) give(115, 1);      // 아주 가끔 당근도 나온다
+  if (id === 1 && Math.random() < 0.05) give(117, 1);      // 감자도 그렇다
   if (id === 14 && Math.random() < 0.18) give(106, 1);     // 자갈에서 부싯돌이 나온다
 }
 function blocked(x, y, z){
@@ -2484,6 +2713,7 @@ function placeBlock(){
   if (blocked(x, y, z)) return;                            // 제 몸이나 몹 안에는 놓지 못한다
   if (!take(id, 1)) return;
   world.setBlock(x, y, z, id, true);
+  Sound.place(id);
   if (id === CHEST) world.tiles.set(x + ',' + y + ',' + z, { t:'chest', items:[] });
   if (id === FURNACE) world.tiles.set(x + ',' + y + ',' + z, { t:'furnace', in:null, fuel:null, out:null, burn:0, burnMax:0, cook:0 });
   player.swing = 1;
@@ -2501,6 +2731,7 @@ function eat(){
   if (player.hp >= MAX_HP){ toast('배가 부르다'); return; }
   heal(ITEMS[f.id].food);
   take(f.id, 1);
+  Sound.eat();
   toast(itemName(f.id) + ' 를 먹었다');
 }
 
@@ -2546,6 +2777,7 @@ function doCraft(){
   if (!r) return;
   for (let i = 0; i < 9; i++) grid[i] = 0;
   give(r.out[0], r.out[1]);
+  Sound.craft();
   toast(itemName(r.out[0]) + ' ×' + r.out[1] + ' 를 만들었다');
   renderInv();
 }
@@ -2727,6 +2959,7 @@ function renderTrade(){
     row.addEventListener('click', () => {
       if (!take(t.give[0], t.give[1])){ toast(itemName(t.give[0]) + ' 가 모자라다'); return; }
       give(t.get[0], t.get[1]);
+      Sound.trade();
       toast(itemName(t.get[0]) + ' ×' + t.get[1] + ' 를 받았다');
       renderTrade();
     });
@@ -2919,6 +3152,8 @@ function requestLock(){
 }
 function start(){
   if (!player.alive) return;
+  Sound.init();                                            // 첫 누름에 소리가 깨어난다
+  if (Sound.ctx && Sound.ctx.state === 'suspended') Sound.ctx.resume();
   playing = true;
   $('dead').classList.remove('on');
   elMenu.classList.add('hide');
@@ -3120,6 +3355,12 @@ $('reset').addEventListener('click', () => {
   toast('처음으로 되돌렸다');
 });
 $('toggleHud').addEventListener('click', () => elHud.classList.toggle('on'));
+$('toggleSound').addEventListener('click', () => {
+  Sound.on = !Sound.on;
+  $('toggleSound').textContent = Sound.on ? '소리 끄기' : '소리 켜기';
+  try { localStorage.setItem('minecraft.web.sound', Sound.on ? '1' : '0'); } catch { /* 저장 못 해도 그만 */ }
+  if (Sound.on) Sound.craft();
+});
 elSeed.addEventListener('change', () => {
   const v = parseInt(elSeed.value.replace(/\D/g, ''), 10);
   if (!isNaN(v)){ setSeed(v); toast('씨앗 ' + SEED); }
@@ -3445,6 +3686,7 @@ function loop(now){
   const tm = /time=([\d.]+)/.exec(location.hash);
   elSeed.value = SEED;
   loadSave();
+  try { if (localStorage.getItem('minecraft.web.sound') === '0'){ Sound.on = false; $('toggleSound').textContent = '소리 켜기'; } } catch { /* 없으면 켠 채로 */ }
   if (tm) sky.time = clamp(parseFloat(tm[1]) || 0, 0, 0.999);
   updateSky(0);
   resize();
