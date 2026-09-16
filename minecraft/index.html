@@ -344,8 +344,9 @@ const T = {
   VILLAGER:41, VILLAGER_FACE:42,
   I_FLINT:43, I_STEEL:44, I_HOE:45, I_SEED:46, I_WHEAT:47, I_BREAD:48, I_COOKED:49,
   I_BUCKET:50, I_WBUCKET:51, FARMLAND_WET:52,
+  ICE:53, LAVA:54, CARROT0:55, CARROT1:56, CARROT2:57, CARROT3:58, I_CARROT:59, I_LBUCKET:60,
 };
-const LAYERS = 53, TILE = 32;
+const LAYERS = 61, TILE = 32;
 
 /* ---------- 3. 블록과 물건 ---------- */
 // L: [윗면, 옆면, 아랫면] · tough: 맨손으로 캐는 데 걸리는 초 · drop: 캐면 나오는 것
@@ -368,14 +369,14 @@ const BLOCKS = [
   { name:'자갈',     L:[T.GRAVEL,T.GRAVEL,T.GRAVEL],      tough:0.7 },
   { name:'석탄광석', L:[T.COAL_ORE,T.COAL_ORE,T.COAL_ORE],tough:2.6, pick:true, drop:100 },
   { name:'철광석',   L:[T.IRON_ORE,T.IRON_ORE,T.IRON_ORE],tough:3.0, pick:true, drop:101 },
-  { name:'빛돌',     L:[T.GLOW,T.GLOW,T.GLOW],            tough:0.5, emit:true },
+  { name:'빛돌',     L:[T.GLOW,T.GLOW,T.GLOW],            tough:0.5, emit:1.35 },
   { name:'양털',     L:[T.WOOL,T.WOOL,T.WOOL],            tough:0.8 },
   { name:'밭',       L:[T.FARMLAND,T.DIRT,T.DIRT],        tough:0.5, drop:2 },                       // 19
-  { name:'밀싹',     L:[T.WHEAT0,T.WHEAT0,T.WHEAT0],      tough:0.05, see:true, pass:true, cross:true, crop:0 },
-  { name:'밀',       L:[T.WHEAT1,T.WHEAT1,T.WHEAT1],      tough:0.05, see:true, pass:true, cross:true, crop:1 },
-  { name:'밀',       L:[T.WHEAT2,T.WHEAT2,T.WHEAT2],      tough:0.05, see:true, pass:true, cross:true, crop:2 },
-  { name:'다 익은 밀',L:[T.WHEAT3,T.WHEAT3,T.WHEAT3],     tough:0.05, see:true, pass:true, cross:true, crop:3 },
-  { name:'불',       L:[T.FIRE,T.FIRE,T.FIRE],            tough:0.02, see:true, pass:true, cross:true, emit:true, fire:true, drop:0 },  // 24
+  { name:'밀싹',     L:[T.WHEAT0,T.WHEAT0,T.WHEAT0],      tough:0.05, see:true, pass:true, cross:true, crop:0, back:109, ripe:110 },
+  { name:'밀',       L:[T.WHEAT1,T.WHEAT1,T.WHEAT1],      tough:0.05, see:true, pass:true, cross:true, crop:1, back:109, ripe:110 },
+  { name:'밀',       L:[T.WHEAT2,T.WHEAT2,T.WHEAT2],      tough:0.05, see:true, pass:true, cross:true, crop:2, back:109, ripe:110 },
+  { name:'다 익은 밀',L:[T.WHEAT3,T.WHEAT3,T.WHEAT3],     tough:0.05, see:true, pass:true, cross:true, crop:3, back:109, ripe:110 },
+  { name:'불',       L:[T.FIRE,T.FIRE,T.FIRE],            tough:0.02, see:true, pass:true, cross:true, emit:1.1, fire:true, drop:0 },  // 24
   { name:'상자',     L:[T.CHEST_TOP,T.CHEST_SIDE,T.CHEST_TOP], tough:1.6, tile:'chest' },             // 25
   { name:'화로',     L:[T.FURNACE_TOP,T.FURNACE_SIDE,T.FURNACE_TOP], tough:2.6, pick:true, tile:'furnace' }, // 26
 ];
@@ -384,10 +385,24 @@ const FLOW_MAX = 5;                             // 샘에서 다섯 칸까지 �
 const FLOW0 = BLOCKS.length;                    // 27
 for (let i = 1; i <= FLOW_MAX; i++) BLOCKS.push({ name:'흐르는 물', L:[T.WATER,T.WATER,T.WATER], see:true, fluid:true, flow:i, drop:0 });
 BLOCKS.push({ name:'젖은 밭', L:[T.FARMLAND_WET,T.DIRT,T.DIRT], tough:0.5, drop:2 });
-const FARM_WET = BLOCKS.length - 1;
+const FARM_WET = BLOCKS.length - 1;                                  // 32
+BLOCKS.push({ name:'얼음', L:[T.ICE,T.ICE,T.ICE], tough:0.6, see:true, ice:true, drop:0 });
+const ICE = BLOCKS.length - 1;                                       // 33
+BLOCKS.push({ name:'용암', L:[T.LAVA,T.LAVA,T.LAVA], fluid:true, lava:true, see:true, emit:1.0, drop:0 });
+const LAVA = BLOCKS.length - 1;                                      // 34
+const LFLOW_MAX = 3;
+const LFLOW0 = BLOCKS.length;                                        // 35
+for (let i = 1; i <= LFLOW_MAX; i++)
+  BLOCKS.push({ name:'흐르는 용암', L:[T.LAVA,T.LAVA,T.LAVA], fluid:true, lava:true, see:true, emit:1.0, flow:i, drop:0 });
+for (let i = 0; i < 4; i++)
+  BLOCKS.push({ name: i === 3 ? '다 자란 당근' : '당근 싹', L:[T['CARROT' + i],T['CARROT' + i],T['CARROT' + i]],
+                tough:0.05, see:true, pass:true, cross:true, crop:i, back:115, ripe:115 });
+const isLava = (id) => id === LAVA || (id >= LFLOW0 && id < LFLOW0 + LFLOW_MAX);
+const lavaOf = (id) => id === LAVA ? 0 : (id >= LFLOW0 && id < LFLOW0 + LFLOW_MAX ? BLOCKS[id].flow : 99);
+const isIce = (id) => id === ICE;
 const isWater = (id) => id === WATER || (id >= FLOW0 && id < FLOW0 + FLOW_MAX);
 const flowOf = (id) => id === WATER ? 0 : id >= FLOW0 && id < FLOW0 + FLOW_MAX ? BLOCKS[id].flow : 99;
-const FARM = 19, CROP0 = 20, FIRE = 24, CHEST = 25, FURNACE = 26;
+const FARM = 19, FIRE = 24, CHEST = 25, FURNACE = 26;
 const isFarm = (id) => id === FARM || id === FARM_WET;
 // 블록이 아닌 물건은 100번부터
 const ITEMS = {
@@ -400,12 +415,14 @@ const ITEMS = {
   106:{ name:'부싯돌',   tex:T.I_FLINT },
   107:{ name:'부시',     tex:T.I_STEEL, lighter:true },
   108:{ name:'괭이',     tex:T.I_HOE, hoe:true },
-  109:{ name:'씨앗',     tex:T.I_SEED, seed:true },
+  109:{ name:'씨앗',     tex:T.I_SEED, plant:20 },
   110:{ name:'밀',       tex:T.I_WHEAT },
   111:{ name:'빵',       tex:T.I_BREAD, food:8 },
   112:{ name:'구운 고기', tex:T.I_COOKED, food:10 },
   113:{ name:'양동이',   tex:T.I_BUCKET, bucket:true },
   114:{ name:'물동이',   tex:T.I_WBUCKET, water:true },
+  115:{ name:'당근',     tex:T.I_CARROT, food:4, plant:38 },
+  116:{ name:'용암동이', tex:T.I_LBUCKET, lava:true },
 };
 const itemName = (id) => id >= 100 ? ITEMS[id].name : BLOCKS[id].name;
 const itemTex  = (id) => id >= 100 ? ITEMS[id].tex  : BLOCKS[id].L[1];
@@ -861,6 +878,45 @@ function buildTiles(){
     if (vn(x, y, 4, 193) > .66) return jit([206, 166, 116], n, 14);
     return jit([150, 92, 48], n, 18);
   });
+  t[T.ICE] = tile((x, y, n) => {
+    const c = vn(x, y, 7, 251), crack = vn(x, y, 3.2, 253);
+    let i = jit([176, 214, 238], n, 10);
+    i = shift(i, (c - .5) * 22);
+    if (crack > .80) i = shift(i, 20);                                 // 갈라진 결
+    return [i[0], i[1], i[2], 236];
+  });
+  t[T.LAVA] = tile((x, y, n) => {
+    const c = vn(x, y, 5, 261), d = vn(x * 1.4, y * 1.4, 3, 263);
+    if (c > .62) return jit([252, 216, 96], n, 24);                    // 이글거리는 결
+    if (c < .28) return jit([146, 38, 12], n, 20);
+    return jit([226, 108, 26], n, 26 + d * 20);
+  });
+  const carrotTile = (stage) => tile((x, y, n) => {
+    const col = x % 8;
+    if (col > 2) return [0, 0, 0, 0];
+    const top = 24 - stage * 5.5;
+    if (y < top) return [0, 0, 0, 0];
+    if (stage === 3 && y > 26 && col === 1) return jit([226, 126, 44], n, 16);   // 고개 내민 뿌리
+    return jit(mix3([96, 152, 68], [70, 150, 58], stage / 3), n, 22);
+  });
+  t[T.CARROT0] = carrotTile(0); t[T.CARROT1] = carrotTile(1);
+  t[T.CARROT2] = carrotTile(2); t[T.CARROT3] = carrotTile(3);
+  t[T.I_CARROT] = tile((x, y, n) => {
+    const d = seg(x, y, 14, 8, 18, 26);
+    const w = 4.6 - (y - 8) * 0.16;
+    if (y > 6 && y < 12 && Math.abs(x - 16) < 5 && d > 2) return jit([86, 152, 62], n, 22);   // 잎
+    if (d < w) return jit([232, 132, 44], n, 20);
+    return [0, 0, 0, 0];
+  });
+  t[T.I_LBUCKET] = tile((x, y, n) => {
+    const inset = (y - 10) * 0.28;
+    if (y < 9 || y > 26) return [0, 0, 0, 0];
+    if (x < 7 + inset || x > 25 - inset) return [0, 0, 0, 0];
+    if (y < 12) return jit([206, 206, 214], n, 12);
+    if (y < 22 && x > 9 + inset && x < 23 - inset) return jit([226, 108, 26], n, 30);
+    if (y > 23) return jit([206, 206, 214], n, 12);
+    return jit([166, 166, 176], n, 12);
+  });
   t[T.I_BUCKET] = tile((x, y, n) => {
     const inset = (y - 10) * 0.28;
     if (y < 9 || y > 26) return [0, 0, 0, 0];
@@ -906,7 +962,6 @@ class Chunk {
 const world = {
   chunks: new Map(),
   edits: new Map(),          // "cx,cz" → Map(로컬번호 → 블록)
-  lights: new Map(),         // "x,y,z" → [x,y,z] 빛나는 블록 자리
   active: new Set(),         // 다음 번에 살펴볼 자리 (물 모래 …)
   tiles: new Map(),          // "x,y,z" → 상자와 화로 속
   crops: new Map(),          // "x,y,z" → 다음 자람 시각
@@ -954,8 +1009,6 @@ const world = {
     c.recalcHeight(lx, lz);
     c.dirty = true;
     const lk = x + ',' + y + ',' + z;
-    if (id !== AIR && BLOCKS[id].emit) this.lights.set(lk, [x + .5, y + .5, z + .5]);
-    else if (old !== AIR && BLOCKS[old] && BLOCKS[old].emit) this.lights.delete(lk);
     if (id === FIRE) this.fires.add(lk); else if (old === FIRE) this.fires.delete(lk);
     if (BLOCKS[id] && BLOCKS[id].crop !== undefined) this.crops.set(lk, CROP_TIME);
     else if (old && BLOCKS[old] && BLOCKS[old].crop !== undefined) this.crops.delete(lk);
@@ -982,7 +1035,6 @@ const world = {
       const x = wx - ox, z = wz - oz;
       if (x < 0 || x >= CX || z < 0 || z >= CZ || wy < 1 || wy >= CH) return;
       b[IDX(x, wy, z)] = id;
-      if (id === 17) this.lights.set(wx + ',' + wy + ',' + wz, [wx + .5, wy + .5, wz + .5]);
     };
     for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++){
       const wx = hs.x + dx, wz = hs.z + dz;
@@ -1024,6 +1076,7 @@ const world = {
           if (isCave(wx, y, wz)) b[IDX(x, y, z)] = AIR;
         }
       }
+      for (let y = 1; y <= 9; y++) if (b[IDX(x, y, z)] === AIR) b[IDX(x, y, z)] = LAVA;   // 굴 바닥의 용암
     }
     // 마을이 이 청크에 걸치는지 먼저 본다 나무가 집을 뚫지 않게
     const houses = [];
@@ -1068,14 +1121,9 @@ const world = {
         this.wake(ox + x, y, oz + z);                      // 옆의 물이 다시 흘러들 수 있게
       }
       if (id === FIRE){
-        const y = Math.floor(i / (CX * CZ)), rr = i - y * CX * CZ;
-        const z = Math.floor(rr / CX), x = rr - z * CX;
-        this.fires.add((ox + x) + ',' + y + ',' + (oz + z));
-      }
-      if (id !== AIR && BLOCKS[id].emit){
-        const y = Math.floor(i / (CX * CZ)), r = i - y * CX * CZ;
-        const z = Math.floor(r / CX), x = r - z * CX;
-        this.lights.set((ox + x) + ',' + y + ',' + (oz + z), [ox + x + .5, y + .5, oz + z + .5]);
+        const yy = Math.floor(i / (CX * CZ)), rr2 = i - yy * CX * CZ;
+        const zz = Math.floor(rr2 / CX), xx = rr2 - zz * CX;
+        this.fires.add((ox + xx) + ',' + yy + ',' + (oz + zz));
       }
     }
     c.gen = true; c.dirty = true;
@@ -1094,6 +1142,8 @@ const CROP_TIME = 22000;                 // 한 단계 자라는 데 걸리는 �
 const TICK = 0.1, FIRE_TICK = 0.4;
 const FLAMMABLE = new Set([6, 7, 8, 18, 20, 21, 22, 23]);
 const FALLS = new Set([5, 14]);          // 모래와 자갈
+const NB6 = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+const NB4 = [[1,0],[-1,0],[0,1],[0,-1]];
 let tickAcc = 0, fireAcc = 0;
 
 function nearWater(x, y, z){
@@ -1132,6 +1182,39 @@ function updateCell(k){
   if (isFarm(id)){                                        // 물가에 있으면 밭이 젖는다
     const want = nearWater(x, y, z) ? FARM_WET : FARM;
     if (id !== want) world.setBlock(x, y, z, want, true);
+    return;
+  }
+  if (isLava(id)){                                        // 용암
+    for (const [dx, dy, dz] of NB6) if (isWater(world.getBlock(x + dx, y + dy, z + dz))){
+      world.setBlock(x, y, z, lavaOf(id) === 0 ? 3 : 4, true);   // 물을 만나면 굳는다
+      return;
+    }
+    if (Math.random() < 0.55){ world.active.add(k); return; }    // 물보다 느리게 흐른다
+    if (Math.random() < 0.10){                                   // 닿은 것에 불을 지른다
+      const [dx, dy, dz] = NB6[Math.floor(Math.random() * 6)];
+      const n = world.getBlock(x + dx, y + dy, z + dz);
+      if (FLAMMABLE.has(n)) world.setBlock(x + dx, y + dy, z + dz, FIRE, true);
+    }
+    const lv = lavaOf(id);
+    const lbelow = world.getBlock(x, y - 1, z);
+    if (lbelow === AIR){
+      world.setBlock(x, y - 1, z, LFLOW0 + Math.max(0, Math.min(LFLOW_MAX, Math.max(1, lv)) - 1), true);
+      if (lv > 0) return;
+    }
+    if (lv > 0){
+      let fed = isLava(world.getBlock(x, y + 1, z));
+      if (!fed) for (const [dx, dz] of NB4){
+        const n = world.getBlock(x + dx, y, z + dz);
+        if (isLava(n) && lavaOf(n) < lv){ fed = true; break; }
+      }
+      if (!fed){ world.setBlock(x, y, z, AIR, true); return; }
+    }
+    if (lv < LFLOW_MAX && world.getBlock(x, y - 1, z) !== AIR){
+      for (const [dx, dz] of NB4){
+        const cur = world.getBlock(x + dx, y, z + dz);
+        if (cur === AIR) world.setBlock(x + dx, y, z + dz, LFLOW0 + lv, true);
+      }
+    }
     return;
   }
   if (!isWater(id)) return;
@@ -1182,7 +1265,43 @@ function simStep(){
     }
   }
 }
+const SNOWABLE = new Set([1, 2, 4, 5, 8, 12, 14]);
+function coverSnow(){                                     // 눈이 내린 자리에 하얗게 쌓인다
+  for (let i = 0; i < 26; i++){
+    const x = Math.floor(player.x + (Math.random() - .5) * 44);
+    const z = Math.floor(player.z + (Math.random() - .5) * 44);
+    if (!world.loaded(x, z)) continue;
+    const h = world.heightAtW(x, z), y = h + 1;
+    const up = world.getBlock(x, y, z);
+    if (isWater(up) && flowOf(up) === 0 && world.getBlock(x, y + 1, z) === AIR){
+      world.setBlock(x, y, z, ICE, false);                 // 물이 언다
+    } else if (up === AIR && SNOWABLE.has(world.getBlock(x, h, z))){
+      world.setBlock(x, y, z, 13, false);
+    }
+  }
+}
+function meltSnow(){                                       // 비가 오거나 날이 풀리면 녹는다
+  for (let i = 0; i < 26; i++){
+    const x = Math.floor(player.x + (Math.random() - .5) * 44);
+    const z = Math.floor(player.z + (Math.random() - .5) * 44);
+    if (!world.loaded(x, z)) continue;
+    const h = world.heightAtW(x, z);
+    for (const y of [h, h + 1]){
+      const b = world.getBlock(x, y, z);
+      if (b === 13){ world.setBlock(x, y, z, AIR, false); break; }
+      if (b === ICE){ world.setBlock(x, y, z, WATER, false); break; }
+    }
+  }
+}
+let snowAcc = 0;
 function simTick(dt){
+  snowAcc += dt;
+  if (snowAcc > 1.1){
+    snowAcc = 0;
+    const cold = weather.kind === 2;
+    if (weather.level > 0.5 && cold) coverSnow();
+    else if (weather.level > 0.5 || !cold) meltSnow();
+  }
   tickAcc += dt;
   let guard = 0;
   while (tickAcc >= TICK && guard++ < 4){ tickAcc -= TICK; simStep(); }
@@ -1248,14 +1367,18 @@ const bufO = new Buf(), bufW = new Buf();
 // 밀과 불은 상자가 아니라 엇갈린 두 장이다 앞뒤로 다 보이게 네 번 굽는다
 const CROSS_A = 0.1465, CROSS_B = 0.8535;
 // 물 높이 · 샘은 거의 가득 차고 멀어질수록 얕아진다 위에 물이 또 있으면 가득 채운다
-function waterTop(here, above){
-  if (!isWater(here)) return 0;
-  if (isWater(above)) return 1;
-  const f = flowOf(here);
-  return f === 0 ? 0.9 : Math.max(0.16, 0.9 - f * (0.72 / FLOW_MAX));
+function fluidTop(here, above){
+  if (here === AIR || !BLOCKS[here].fluid) return 0;
+  const lava = !!BLOCKS[here].lava;
+  if (above !== AIR && BLOCKS[above].fluid && !!BLOCKS[above].lava === lava) return 1;
+  const f = lava ? lavaOf(here) : flowOf(here);
+  const max = lava ? LFLOW_MAX : FLOW_MAX;
+  return f === 0 ? 0.9 : Math.max(0.16, 0.9 - f * (0.72 / max));
 }
-function emitWater(buf, x, y, z, id, layer, lit){
-  const hAt = (bx, by, bz) => waterTop(pad[PI(bx, by, bz)], pad[PI(bx, by + 1, bz)]);
+function emitFluid(buf, x, y, z, id, layer, lit){
+  const lava = !!BLOCKS[id].lava;
+  const same = (b) => b !== AIR && BLOCKS[b].fluid && !!BLOCKS[b].lava === lava;
+  const hAt = (bx, by, bz) => fluidTop(pad[PI(bx, by, bz)], pad[PI(bx, by + 1, bz)]);
   const h = hAt(x, y, z);
   for (let f = 0; f < 6; f++){
     const F = FACES[f], nx = x + F.n[0], ny = y + F.n[1], nz = z + F.n[2];
@@ -1263,11 +1386,10 @@ function emitWater(buf, x, y, z, id, layer, lit){
     if (isOpaque(nb)) continue;
     let lo = 0, hi = h;
     if (f <= 1){
-      if (isWater(nb)) continue;                         // 물끼리는 위아래로 잇는다
-      if (f === 1 && nb === AIR && h < 1) hi = h;         // 떨어지는 물의 밑면
+      if (same(nb)) continue;                            // 같은 액체끼리는 위아래로 잇는다
     } else {
-      const nh = isWater(nb) ? hAt(nx, ny, nz) : 0;
-      if (isWater(nb) && nh >= h - 0.002) continue;       // 이웃이 더 높으면 가린다
+      const nh = same(nb) ? hAt(nx, ny, nz) : 0;
+      if (same(nb) && nh >= h - 0.002) continue;          // 이웃이 더 높으면 가린다
       lo = nh;
     }
     buf.room(4, 6);
@@ -1337,8 +1459,9 @@ function buildMesh(c){
       emitCross(bufO, x, y, z, def.L[0], lit);
       continue;
     }
-    if (water){
-      emitWater(bufW, x, y, z, id, def.L[0], y > padH[(z + 1) * PX + (x + 1)] ? 1 : 0);
+    if (def.fluid){
+      emitFluid(def.lava ? bufO : bufW, x, y, z, id, def.L[0],
+                def.emit ? 2 : (y > padH[(z + 1) * PX + (x + 1)] ? 1 : 0));
       continue;
     }
     for (let f = 0; f < 6; f++){
@@ -1820,6 +1943,7 @@ const TRADES = [
   { give:[101,3],  get:[105,1] }, { give:[101,4],  get:[104,1] },
   { give:[8,12],   get:[100,4] }, { give:[103,6],  get:[112,6] },
   { give:[5,12],   get:[11,6] },  { give:[109,8],  get:[110,4] },
+  { give:[115,10], get:[101,1] }, { give:[101,1],  get:[115,6] },
 ];
 function pickTrades(){
   const pool = TRADES.slice(), out = [];
@@ -1851,11 +1975,25 @@ function moveBox(e, axis, d, w, h){
   }
   return true;
 }
+function nearestHouse(x, z){
+  const rx0 = Math.floor(x / VILL), rz0 = Math.floor(z / VILL);
+  let best = null, bd = 1e9;
+  for (let rx = rx0 - 1; rx <= rx0 + 1; rx++) for (let rz = rz0 - 1; rz <= rz0 + 1; rz++){
+    const v = villageAt(rx, rz);
+    if (!v) continue;
+    for (const hs of housesOf(v)){
+      const d = (hs.x - x) ** 2 + (hs.z - z) ** 2;
+      if (d < bd){ bd = d; best = hs; }
+    }
+  }
+  return best ? [best.x, best.h + 1, best.z] : null;
+}
 function spawnMob(kind, x, y, z){
   const d = MOBS[kind];
   mobs.push({ kind, def:d, x, y, z, vx:0, vy:0, vz:0, yaw:Math.random() * 6.28,
               hp:d.hp, ground:false, walk:0, step:0, think:0, hurt:0, cool:0, burn:0, flee:0, mode:1,
-              trades: kind === 'villager' ? pickTrades() : null });
+              trades: kind === 'villager' ? pickTrades() : null,
+              home: kind === 'villager' ? nearestHouse(x, z) : null });
 }
 function mobSpot(minD, maxD){
   for (let i = 0; i < 14; i++){
@@ -1910,10 +2048,21 @@ function updateMobs(dt){
 
     let go = 0;
     if (d.hostile){
-      if (dist < 24){                                     // 사람을 보면 쫓아온다
-        m.yaw = Math.atan2(-dx, -dz);
-        go = dist > 1.1 ? 1 : 0;
-        if (dist < 1.5 && m.cool <= 0 && Math.abs(dy) < 2){ hurtPlayer(d.dmg, '좀비에게 맞았다', m.x, m.z); m.cool = 1.1; }
+      // 사람과 주민 가운데 가까운 쪽을 쫓는다
+      let tx = player.x, tz = player.z, td = dist, prey = null;
+      for (const v of mobs){
+        if (v.kind !== 'villager') continue;
+        const vd = Math.hypot(v.x - m.x, v.z - m.z);
+        if (vd < td){ td = vd; tx = v.x; tz = v.z; prey = v; }
+      }
+      if (td < 24){
+        m.yaw = Math.atan2(-(tx - m.x), -(tz - m.z));
+        go = td > 1.1 ? 1 : 0;
+        if (td < 1.5 && m.cool <= 0){
+          if (prey) hitMob(prey, d.dmg, m.x, m.z);
+          else if (Math.abs(dy) < 2) hurtPlayer(d.dmg, '좀비에게 맞았다', m.x, m.z);
+          m.cool = 1.1;
+        }
       } else { m.think -= dt; if (m.think <= 0){ m.think = 2 + Math.random() * 3; m.yaw += (Math.random() - .5) * 2.4; } go = 0.5; }
       // 햇빛에 탄다
       if (sky.day > 0.85 && world.sunlit(Math.floor(m.x), Math.floor(m.y + 1), Math.floor(m.z))){
@@ -1928,12 +2077,31 @@ function updateMobs(dt){
       }
       go = m.mode ? 0.85 : 0;
       if (m.flee > 0){ m.flee -= dt; go = 1.3; }
+      // 주민은 좀비를 피하고 밤이면 집으로 간다
+      if (m.kind === 'villager'){
+        let near = null, nd = 9;
+        for (const z2 of mobs){
+          if (!z2.def.hostile) continue;
+          const zd = Math.hypot(z2.x - m.x, z2.z - m.z);
+          if (zd < nd){ nd = zd; near = z2; }
+        }
+        if (near){
+          m.yaw = Math.atan2(m.x - near.x, m.z - near.z);
+          go = 1.35;
+        } else if (m.home && isNight()){
+          const hx = m.home[0] - m.x, hz = m.home[2] - m.z;
+          const hd = Math.hypot(hx, hz);
+          if (hd > 1.4){ m.yaw = Math.atan2(-hx, -hz); go = 1; }
+          else go = 0;
+        }
+      }
     }
-    if (world.getBlock(Math.floor(m.x), Math.floor(m.y + 0.2), Math.floor(m.z)) === FIRE){
-      m.hp -= dt * 5; m.hurt = Math.max(m.hurt, 0.12);
-    }
+    const under = world.getBlock(Math.floor(m.x), Math.floor(m.y + 0.2), Math.floor(m.z));
+    if (under === FIRE){ m.hp -= dt * 5; m.hurt = Math.max(m.hurt, 0.12); }
+    if (isLava(under)){ m.hp -= dt * 14; m.hurt = Math.max(m.hurt, 0.12); }
     if (m.hp <= 0){ killMob(i); continue; }
 
+    if (hitsBox(m.x, m.y, m.z, d.w, d.h)) m.y += 0.6;       // 땅에 박혔으면 밀어 올린다
     const sp = d.speed * go;
     const fx = -Math.sin(m.yaw), fz = -Math.cos(m.yaw);
     m.vx += (fx * sp - m.vx) * Math.min(1, dt * 8);
@@ -1960,12 +2128,13 @@ function killMob(i){
   toast(m.def.name + ' 를 잡았다' + (m.def.drop ? ' · ' + itemName(m.def.drop[0]) + ' ×' + m.def.drop[1] : ''));
   mobs.splice(i, 1);
 }
-function hitMob(m, dmg){
+function hitMob(m, dmg, fromX, fromZ){
   m.hp -= dmg;
   m.hurt = 0.32;
   m.flee = 6;
   m.mode = 1;
-  const dx = m.x - player.x, dz = m.z - player.z, l = Math.hypot(dx, dz) || 1;
+  const ox = fromX === undefined ? player.x : fromX, oz = fromZ === undefined ? player.z : fromZ;
+  const dx = m.x - ox, dz = m.z - oz, l = Math.hypot(dx, dz) || 1;
   m.vx += dx / l * 5.5; m.vz += dz / l * 5.5; m.vy = 4.2;
   if (!m.def.hostile) m.yaw = Math.atan2(dx, dz);          // 놀라서 반대로 달아난다
   const i = mobs.indexOf(m);
@@ -2034,6 +2203,8 @@ function updatePlayer(dt){
   player.hurt = Math.max(0, player.hurt - dt);
   const feet = world.getBlock(Math.floor(player.x), Math.floor(player.y + 0.2), Math.floor(player.z));
   if (feet === FIRE) hurtPlayer(2, '불에 탔다');
+  if (isLava(feet)) hurtPlayer(6, '용암에 빠졌다');
+  player.lava = isLava(world.getBlock(Math.floor(player.x), Math.floor(player.y + 0.4), Math.floor(player.z)));
   player.swing = Math.max(0, player.swing - dt * 3);
 
   let fx = 0, fz = 0;
@@ -2046,9 +2217,11 @@ function updatePlayer(dt){
   const wx = fx * cos - fz * sin, wz = fx * sin + fz * cos;
 
   const run = keys.has('ShiftLeft') || keys.has('ShiftRight');
-  const speed = player.fly ? (run ? FLY * 1.8 : FLY) : player.water ? WALK * 0.62 : run ? RUN : WALK;
+  const speed = player.fly ? (run ? FLY * 1.8 : FLY) : player.lava ? WALK * 0.4 : player.water ? WALK * 0.62 : run ? RUN : WALK;
   const grip = player.fly || player.ground || player.water ? 1 : 0.38;
-  const k = Math.min(1, dt * (player.fly ? 9 : 12) * grip);
+  const under = world.getBlock(Math.floor(player.x), Math.floor(player.y - 0.1), Math.floor(player.z));
+  const slip = (isIce(under) && player.ground && !player.fly) ? 0.17 : 1;   // 얼음은 미끄럽다
+  const k = Math.min(1, dt * (player.fly ? 9 : 12) * grip * slip);
   player.vx += (wx * speed - player.vx) * k;
   player.vz += (wz * speed - player.vz) * k;
 
@@ -2056,10 +2229,10 @@ function updatePlayer(dt){
   if (player.fly){
     const down = run ? 1 : 0;
     player.vy += (((up ? 1 : 0) - down) * FLY - player.vy) * Math.min(1, dt * 10);
-  } else if (player.water){
-    player.vy += (-GRAV * 0.22) * dt;
-    if (up) player.vy = 4.2;
-    player.vy = Math.max(player.vy, -4.5);
+  } else if (player.water || player.lava){
+    player.vy += (-GRAV * (player.lava ? 0.36 : 0.22)) * dt;              // 용암은 더 끈적하다
+    if (up) player.vy = player.lava ? 2.6 : 4.2;
+    player.vy = Math.max(player.vy, player.lava ? -2.4 : -4.5);
     player.fallFrom = null;
   } else {
     player.vy -= GRAV * dt;
@@ -2220,13 +2393,14 @@ function harvest(x, y, z, id, def){
   }
   world.setBlock(x, y, z, AIR, true);
   if (def.crop !== undefined){
-    give(109, 1);
-    if (def.crop === 3){ give(110, 1); if (Math.random() < 0.5) give(109, 1); }
+    give(def.back, 1);
+    if (def.crop === 3){ give(def.ripe, 1); if (Math.random() < 0.5) give(def.ripe, 1); }
     return;
   }
   const drop = def.drop !== undefined ? def.drop : id;
   if (drop) give(drop, 1);
   if (id === 1 && Math.random() < 0.28) give(109, 1);      // 잔디에서 씨앗이 나온다
+  if (id === 1 && Math.random() < 0.06) give(115, 1);      // 아주 가끔 당근도 나온다
   if (id === 14 && Math.random() < 0.18) give(106, 1);     // 자갈에서 부싯돌이 나온다
 }
 function blocked(x, y, z){
@@ -2254,20 +2428,24 @@ function placeBlock(){
   // 2. 양동이로 물을 뜨고 붓는다
   if (it && it.bucket){
     const wet = raycast(true);
-    if (wet && isWater(wet.id)){
+    if (wet && isWater(wet.id) && flowOf(wet.id) === 0){
       world.setBlock(wet.x, wet.y, wet.z, AIR, true);
       take(113, 1); give(114, 1);
       toast('물을 떴다');
-    } else toast('물가에서 떠야 한다');
+    } else if (wet && isLava(wet.id) && lavaOf(wet.id) === 0){
+      world.setBlock(wet.x, wet.y, wet.z, AIR, true);
+      take(113, 1); give(116, 1);
+      toast('용암을 떴다');
+    } else toast('샘에서 떠야 한다');
     return;
   }
-  if (it && it.water){
+  if (it && (it.water || it.lava)){
     if (!hit) return;
     const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
     if (world.getBlock(x, y, z) !== AIR || blocked(x, y, z)) return;
-    world.setBlock(x, y, z, WATER, true);
-    take(114, 1); give(113, 1);
-    toast('물을 부었다');
+    world.setBlock(x, y, z, it.lava ? LAVA : WATER, true);
+    take(it.lava ? 116 : 114, 1); give(113, 1);
+    toast(it.lava ? '용암을 부었다' : '물을 부었다');
     return;
   }
   if (!hit) return;
@@ -2282,11 +2460,11 @@ function placeBlock(){
     } else toast('잔디나 흙 위에서 갈 수 있다');
     return;
   }
-  // 4. 씨앗을 심는다
-  if (it && it.seed){
+  // 4. 씨앗과 당근을 심는다
+  if (it && it.plant){
     if (isFarm(target) && above === AIR){
-      if (!take(109, 1)) return;
-      world.setBlock(hit.x, hit.y + 1, hit.z, CROP0, true);
+      if (!take(id, 1)) return;
+      world.setBlock(hit.x, hit.y + 1, hit.z, it.plant, true);
       player.swing = 1;
     } else toast('갈아 둔 밭에 심는다');
     return;
@@ -2887,7 +3065,7 @@ function save(){
   } catch { /* 저장 공간이 없으면 조용히 넘어간다 */ }
 }
 function loadSave(){
-  world.edits.clear(); world.lights.clear();
+  world.edits.clear();
   world.tiles.clear(); world.crops.clear(); world.fires.clear(); world.active.clear();
   bag.length = 0; saved = null;
   try {
@@ -2934,7 +3112,7 @@ $('newworld').addEventListener('click', () => {
   toast('새 씨앗 ' + SEED);
 });
 $('reset').addEventListener('click', () => {
-  world.edits.clear(); world.lights.clear(); bag.length = 0;
+  world.edits.clear(); bag.length = 0;
   world.tiles.clear(); world.crops.clear(); world.fires.clear();
   player.hp = MAX_HP; player.alive = true; sky.time = 0.06;
   saved = null; save();
@@ -3006,19 +3184,27 @@ window.addEventListener('resize', resize);
 const emptyVao = gl.createVertexArray();
 const lightArr = new Float32Array(64);
 let lightCount = 0;
-function gatherLights(){
-  const px = player.x, py = player.y + EYE, pz = player.z;
-  const list = [];
-  for (const p of world.lights.values()){
-    const d = (p[0]-px)**2 + (p[1]-py)**2 + (p[2]-pz)**2;
-    if (d < 2500) list.push([d, p]);
-    if (list.length > 220) break;
+let lightScan = 0;
+function gatherLights(dt){
+  lightScan -= dt;
+  if (lightScan > 0) return;
+  lightScan = 0.45;                                        // 반 초에 한 번만 둘레를 훑는다
+  const px = Math.floor(player.x), py = Math.floor(player.y + EYE), pz = Math.floor(player.z);
+  const R = 10, list = [];
+  for (let y = py - R; y <= py + R; y++){
+    if (y < 0 || y >= CH) continue;
+    for (let z = pz - R; z <= pz + R; z++) for (let x = px - R; x <= px + R; x++){
+      const id = world.getBlock(x, y, z);
+      if (id === AIR || !BLOCKS[id].emit) continue;
+      const dx = x + .5 - player.x, dy = y + .5 - player.y - EYE, dz = z + .5 - player.z;
+      list.push([dx*dx + dy*dy + dz*dz, x + .5, y + .5, z + .5, BLOCKS[id].emit]);
+    }
   }
   list.sort((a, b) => a[0] - b[0]);
   lightCount = Math.min(16, list.length);
   for (let i = 0; i < lightCount; i++){
-    const p = list[i][1];
-    lightArr[i*4] = p[0]; lightArr[i*4+1] = p[1]; lightArr[i*4+2] = p[2]; lightArr[i*4+3] = 1.3;
+    const p = list[i];
+    lightArr[i*4] = p[1]; lightArr[i*4+1] = p[2]; lightArr[i*4+2] = p[3]; lightArr[i*4+3] = p[4];
   }
 }
 function lightAt(x, y, z){
@@ -3080,7 +3266,7 @@ function drawMobs(fogNear, fogFar, fog){
   }
 }
 
-function render(now){
+function render(now, dt){
   resize();
   const under = player.head;
   let top = under ? [0.05,0.17,0.40] : sky.top;
@@ -3129,7 +3315,7 @@ function render(now){
   gl.enable(gl.CULL_FACE);
   gl.cullFace(gl.BACK);
 
-  gatherLights();
+  gatherLights(dt);
   gl.useProgram(progBlock);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
@@ -3142,7 +3328,7 @@ function render(now){
   gl.uniform1f(U.fogFar, far);
   gl.uniform1f(U.time, now / 1000);
   gl.uniform1f(U.day, under ? dayLight * 0.8 : dayLight);
-  gl.uniform1f(U.ambient, 0.17);
+  gl.uniform1f(U.ambient, 0.20);
   gl.uniform4fv(U.lights, lightArr);
   gl.uniform1i(U.lightCount, lightCount);
 
@@ -3236,7 +3422,7 @@ function loop(now){
     }
   } else showBar(0);
   stream();
-  render(now);
+  render(now, dt);
 
   fpsN++; fpsT += dt; hudT += dt; clockT += dt;
   if (clockT > 0.5){ clockT = 0; drawClock(); }
